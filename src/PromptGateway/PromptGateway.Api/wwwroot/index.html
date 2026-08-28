@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prompt / Policy Gateway</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui; margin: 0; background: #111; color: #eee; }
+    main { max-width: 800px; margin: 0 auto; padding: 24px; }
+    textarea, input { width: 100%; font: inherit; background: #1c1c1c; color: inherit; border: 1px solid #333; border-radius: 8px; padding: 10px; }
+    button { font: inherit; padding: 8px 14px; border: 0; border-radius: 8px; background: #22c55e; color: #052e16; cursor: pointer; }
+    pre { background: #1c1c1c; padding: 12px; border-radius: 8px; overflow: auto; white-space: pre-wrap; }
+    label { display: block; margin: 12px 0 4px; color: #aaa; }
+    .howto { background: #1a1a1a; border-left: 4px solid #22c55e; padding: 14px 16px; border-radius: 8px; line-height: 1.55; margin-bottom: 20px; }
+    .howto ol { margin: 8px 0 0; padding-left: 1.2rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Şirket ChatGPT kapısı (demo)</h1>
+  <div class="howto">
+    <strong>Ne işe yarar?</strong> Çalışanlar ChatGPT’ye doğrudan gitmez. Bu sayfa aradaki güvenlik filtresidir: mail/telefon/kart metinden silinir, pahalı model ucuz/izinli modele çevrilir, her istek kayda geçer.
+    <ol>
+      <li>Aşağıdaki yeşil düğmeye bas. Alttaki kutuda sahte bir AI cevabı çıkar.</li>
+      <li>Cevabın içinde <code>company-strong</code> görürsün: sen <code>gpt-4o</code> yazdın, kapı modeli değiştirdi.</li>
+      <li>Prompt’taki e-posta ve kart, gerçek modele gitmeden <code>[email]</code> / <code>[card]</code> olur. <b>Audit</b> ile kaydı gör.</li>
+    </ol>
+    Bu ChatGPT’nin kendisi değil; kapının çalıştığını gösteren bir deneme ekranı.
+  </div>
+  <label>API key</label>
+  <input id="key" value="team-a" />
+  <label>İstenen model</label>
+  <input id="model" value="gpt-4o" />
+  <label>Prompt (e-posta / kart dene)</label>
+  <textarea id="prompt" rows="5">Müşteri Ali, e-posta ali@firma.com kart 4111 1111 1111 1111 ile aradı. Tel 05321234567.</textarea>
+  <p><button id="send">Gönder — kapıdan geçir</button></p>
+  <pre id="out"> </pre>
+  <p><button id="audit" style="background:#3b82f6;color:#fff">Audit</button>
+     <button id="budget" style="background:#6366f1;color:#fff">Bütçe</button></p>
+</main>
+<script>
+  async function post() {
+    const res = await fetch("/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Api-Key": document.getElementById("key").value },
+      body: JSON.stringify({
+        model: document.getElementById("model").value,
+        messages: [{ role: "user", content: document.getElementById("prompt").value }]
+      })
+    });
+    document.getElementById("out").textContent = await res.text();
+  }
+  document.getElementById("send").onclick = post;
+  document.getElementById("audit").onclick = async () => {
+    document.getElementById("out").textContent = JSON.stringify(await (await fetch("/admin/audit")).json(), null, 2);
+  };
+  document.getElementById("budget").onclick = async () => {
+    document.getElementById("out").textContent = JSON.stringify(await (await fetch("/admin/budget")).json(), null, 2);
+  };
+</script>
+</body>
+</html>
