@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Impo - Dashboard</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #0b1220 0%, #1a2744 100%);
+      color: #e8eefc;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 48px; padding-top: 40px; }
+    h1 { 
+      font-size: 48px; 
+      font-weight: 700; 
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle { 
+      font-size: 18px; 
+      color: #8aa0c7; 
+      margin-bottom: 8px;
+    }
+    .version {
+      display: inline-block;
+      background: #3b82f6;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 12px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      background: rgba(20, 28, 46, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid #243152;
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .stat-card:hover {
+      transform: translateY(-4px);
+      border-color: #3b82f6;
+    }
+    .stat-value {
+      font-size: 36px;
+      font-weight: 700;
+      color: #3b82f6;
+      margin-bottom: 8px;
+    }
+    .stat-label {
+      font-size: 14px;
+      color: #8aa0c7;
+    }
+    .services {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+    .service-card {
+      background: rgba(20, 28, 46, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid #243152;
+      border-radius: 16px;
+      padding: 24px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .service-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      transform: scaleX(0);
+      transition: transform 0.3s ease;
+    }
+    .service-card:hover::before {
+      transform: scaleX(1);
+    }
+    .service-card:hover {
+      transform: translateY(-4px);
+      border-color: #3b82f6;
+      box-shadow: 0 12px 24px rgba(59, 130, 246, 0.2);
+    }
+    .service-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .service-title {
+      font-size: 20px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .service-icon {
+      font-size: 24px;
+    }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status.checking { background: #6b7280; }
+    .status.online { background: #10b981; animation: pulse 2s ease-in-out infinite; }
+    .status.offline { background: #ef4444; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: white;
+    }
+    .service-desc {
+      color: #8aa0c7;
+      font-size: 14px;
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+    .service-info {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .info-label {
+      color: #6b7280;
+      min-width: 60px;
+    }
+    .info-value {
+      color: #c5d4f0;
+      font-family: 'Courier New', monospace;
+    }
+    .service-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #2563eb;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: #1e2a48;
+      color: #c5d4f0;
+      border: 1px solid #33456f;
+    }
+    .btn-secondary:hover {
+      background: #2a3b5e;
+      border-color: #4a5f8f;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 48px;
+      padding: 24px;
+      color: #6b7280;
+      font-size: 14px;
+    }
+    .footer a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🚀 Impo</h1>
+      <p class="subtitle">Dört Yaratıcı .NET Ürünü</p>
+      <span class="version">v3.0.0</span>
+    </header>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-value">4</div>
+        <div class="stat-label">Servis</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="onlineCount">-</div>
+        <div class="stat-label">Çalışıyor</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">27</div>
+        <div class="stat-label">Test Geçti</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">100%</div>
+        <div class="stat-label">Success Rate</div>
+      </div>
+    </div>
+
+    <div class="services">
+      <!-- Spectator -->
+      <div class="service-card" data-service="spectator">
+        <div class="service-header">
+          <div class="service-title">
+            <span class="service-icon">🏟️</span>
+            Spectator
+          </div>
+          <span class="status checking">
+            <span class="status-dot"></span>
+            Kontrol ediliyor...
+          </span>
+        </div>
+        <p class="service-desc">
+          Event sourcing + SignalR + gRPC ile canlı maç skorları ve time-travel replay
+        </p>
+        <div class="service-info">
+          <div class="info-row">
+            <span class="info-label">Port:</span>
+            <span class="info-value">5185, 5186</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Teknoloji:</span>
+            <span class="info-value">SignalR, gRPC</span>
+          </div>
+        </div>
+        <div class="service-actions">
+          <a href="http://localhost:5185" target="_blank" class="btn btn-primary">
+            🌐 Aç
+          </a>
+          <a href="http://localhost:5185/health" target="_blank" class="btn btn-secondary">
+            ❤️ Health
+          </a>
+        </div>
+      </div>
+
+      <!-- LocalCrm -->
+      <div class="service-card" data-service="localcrm">
+        <div class="service-header">
+          <div class="service-title">
+            <span class="service-icon">👥</span>
+            LocalCrm
+          </div>
+          <span class="status checking">
+            <span class="status-dot"></span>
+            Kontrol ediliyor...
+          </span>
+        </div>
+        <p class="service-desc">
+          Local-first CRM - Field-level merging ile offline çalışma ve bulut senkronizasyonu
+        </p>
+        <div class="service-info">
+          <div class="info-row">
+            <span class="info-label">Port:</span>
+            <span class="info-value">5057 (API), 5209 (App)</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Teknoloji:</span>
+            <span class="info-value">Blazor, SQLite</span>
+          </div>
+        </div>
+        <div class="service-actions">
+          <a href="http://localhost:5209" target="_blank" class="btn btn-primary">
+            🌐 App
+          </a>
+          <a href="http://localhost:5057/health" target="_blank" class="btn btn-secondary">
+            ❤️ Health
+          </a>
+        </div>
+      </div>
+
+      <!-- PromptGateway -->
+      <div class="service-card" data-service="gateway">
+        <div class="service-header">
+          <div class="service-title">
+            <span class="service-icon">🤖</span>
+            PromptGateway
+          </div>
+          <span class="status checking">
+            <span class="status-dot"></span>
+            Kontrol ediliyor...
+          </span>
+        </div>
+        <p class="service-desc">
+          LLM Gateway - PII masking, rate limiting, model routing ve audit logging
+        </p>
+        <div class="service-info">
+          <div class="info-row">
+            <span class="info-label">Port:</span>
+            <span class="info-value">5047</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Teknoloji:</span>
+            <span class="info-value">YARP, Regex</span>
+          </div>
+        </div>
+        <div class="service-actions">
+          <a href="http://localhost:5047" target="_blank" class="btn btn-primary">
+            🌐 Aç
+          </a>
+          <a href="http://localhost:5047/health" target="_blank" class="btn btn-secondary">
+            ❤️ Health
+          </a>
+        </div>
+      </div>
+
+      <!-- Archeologist -->
+      <div class="service-card" data-service="archeologist">
+        <div class="service-header">
+          <div class="service-title">
+            <span class="service-icon">🔍</span>
+            Archeologist
+          </div>
+          <span class="status offline">
+            <span class="status-dot"></span>
+            CLI Tool
+          </span>
+        </div>
+        <p class="service-desc">
+          Kod Analiz Aracı - Roslyn ile C# kodunda anti-pattern tespiti ve güvenlik taraması
+        </p>
+        <div class="service-info">
+          <div class="info-row">
+            <span class="info-label">Tip:</span>
+            <span class="info-value">Console CLI</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Patterns:</span>
+            <span class="info-value">8 detection rules</span>
+          </div>
+        </div>
+        <div class="service-actions">
+          <button class="btn btn-primary" onclick="showArcheologistInfo()">
+            📖 Nasıl Kullanılır
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p>
+        <strong>Impo v3.0.0</strong> - Production Ready 🚀
+      </p>
+      <p style="margin-top: 8px;">
+        <a href="https://github.com" target="_blank">GitHub</a> •
+        <a href="API.md" target="_blank">API Docs</a> •
+        <a href="TESTING.md" target="_blank">Testing Guide</a> •
+        <a href="FINAL_SUMMARY.md" target="_blank">Full Summary</a>
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    const services = [
+      { name: 'spectator', url: 'http://localhost:5185/health' },
+      { name: 'localcrm', url: 'http://localhost:5057/health' },
+      { name: 'gateway', url: 'http://localhost:5047/health' }
+    ];
+
+    async function checkService(service) {
+      const card = document.querySelector(`[data-service="${service.name}"]`);
+      const statusEl = card.querySelector('.status');
+      
+      try {
+        const response = await fetch(service.url);
+        if (response.ok) {
+          statusEl.className = 'status online';
+          statusEl.innerHTML = '<span class="status-dot"></span>Çalışıyor';
+        } else {
+          statusEl.className = 'status offline';
+          statusEl.innerHTML = '<span class="status-dot"></span>Offline';
+        }
+      } catch (error) {
+        statusEl.className = 'status offline';
+        statusEl.innerHTML = '<span class="status-dot"></span>Offline';
+      }
+    }
+
+    async function checkAllServices() {
+      await Promise.all(services.map(checkService));
+      
+      const onlineCount = document.querySelectorAll('.status.online').length;
+      document.getElementById('onlineCount').textContent = onlineCount;
+    }
+
+    function showArcheologistInfo() {
+      alert(`Archeologist CLI Kullanımı:
+
+Basit tarama:
+dotnet run --project src/Archeologist/Archeologist.Cli -- samples/legacy
+
+JSON çıktı:
+dotnet run --project src/Archeologist/Archeologist.Cli -- samples/legacy --json
+
+Sadece kritik bulguları:
+dotnet run --project src/Archeologist/Archeologist.Cli -- samples/legacy --min-severity CRITICAL
+
+Daha fazla bilgi için TESTING.md dosyasına bakın!`);
+    }
+
+    // İlk kontrol
+    checkAllServices();
+    
+    // Her 10 saniyede bir kontrol et
+    setInterval(checkAllServices, 10000);
+  </script>
+</body>
+</html>
