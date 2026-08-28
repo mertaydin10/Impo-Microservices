@@ -1,0 +1,17 @@
+:root { color-scheme: light; --bg:#f4f1ea; --ink:#1c1915; --line:#d9d2c5; --acc:#1f6feb; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Iowan Old Style", "Palatino Linotype", serif; }
+.shell { max-width: 960px; margin: 0 auto; padding: 32px 20px 80px; }
+h1 { font-weight: 600; letter-spacing: -0.03em; }
+.muted { color: #6b6458; font-size: 0.95rem; }
+.bar { display: flex; gap: 8px; align-items: center; margin: 16px 0 24px; flex-wrap: wrap; }
+button { font: inherit; background: var(--acc); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+button.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+.grid { display: grid; grid-template-columns: 280px 1fr; gap: 24px; }
+.card { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; background: #fff; color: inherit; border: 1px solid var(--line); margin-bottom: 8px; }
+.card.on { outline: 2px solid var(--acc); }
+label { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+input, textarea { font: inherit; padding: 8px; border-radius: 8px; border: 1px solid var(--line); }
+textarea { min-height: 80px; }
+@media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+h1:focus { outline: none; }
