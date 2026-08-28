@@ -1,0 +1,75 @@
+## Bin and obj folders
+**/bin/
+**/obj/
+
+## User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vs/
+.vscode/
+
+## Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+
+## Database files
+*.db
+*.db-shm
+*.db-wal
+
+## Environment files
+.env
+.env.local
+.env.*.local
+
+## Node modules (if any)
+node_modules/
+package-lock.json
+yarn.lock
+
+## macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+## Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+## Rider
+.idea/
+*.sln.iml
+
+## Test results
+TestResults/
+*.trx
+*.coverage
+
+## Logs
+logs/
+*.log
+
+## Docker
+.dockerignore
+
+## Publish profiles
+PublishProfiles/
+
+# Local CRM data
+cloud.db
+
+# Temp files
+*.tmp
+*.temp
