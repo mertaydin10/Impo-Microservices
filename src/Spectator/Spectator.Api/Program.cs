@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.SignalR;
 using Spectator.Api;
 using System.Text.Json;
 
+LoadEnvironmentFile();
 var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(options =>
@@ -17,6 +18,7 @@ builder.Services.AddSingleton<MetricsCollector>();
 builder.Services.AddSignalR();
 builder.Services.AddGrpc();
 builder.Services.AddHealthChecks();
+builder.Services.AddHttpClient<FootballApiClient>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -46,6 +48,47 @@ app.MapHealthChecks("/health");
 
 app.MapHub<MatchHub>("/hub/match");
 app.MapGrpcService<MatchIngestService>();
+
+app.MapGet("/api/football/status", (FootballApiClient footballApi) =>
+    Results.Ok(new { configured = footballApi.IsConfigured }))
+.WithName("GetFootballApiStatus")
+.WithTags("Football data");
+
+app.MapGet("/api/football/teams", async (
+    string? country,
+    FootballApiClient footballApi,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await footballApi.GetTeamsAsync(
+            string.IsNullOrWhiteSpace(country) ? "Turkey" : country,
+            cancellationToken));
+    }
+    catch (FootballApiUnavailableException exception)
+    {
+        return Results.Problem(exception.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+})
+.WithName("GetFootballTeams")
+.WithTags("Football data");
+
+app.MapGet("/api/football/teams/{teamId:int}/squad", async (
+    int teamId,
+    FootballApiClient footballApi,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        return Results.Ok(await footballApi.GetSquadAsync(teamId, cancellationToken));
+    }
+    catch (FootballApiUnavailableException exception)
+    {
+        return Results.Problem(exception.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+})
+.WithName("GetFootballTeamSquad")
+.WithTags("Football data");
 
 app.MapPost("/api/matches/{matchId}/events", async (
     string matchId,
@@ -97,9 +140,11 @@ app.MapPost("/api/matches", (CreateMatchDto dto, EventStore store) =>
 {
     if (string.IsNullOrWhiteSpace(dto.MatchId) ||
         string.IsNullOrWhiteSpace(dto.HomeTeam) ||
-        string.IsNullOrWhiteSpace(dto.AwayTeam))
+        string.IsNullOrWhiteSpace(dto.AwayTeam) ||
+        dto.HomeTeamId <= 0 ||
+        dto.AwayTeamId <= 0)
     {
-        return Results.BadRequest(new { message = "Maç kodu ve takım adları zorunludur." });
+        return Results.BadRequest(new { message = "Maç kodu ile API-Football üzerinden iki kulüp seçilmelidir." });
     }
 
     var matchId = dto.MatchId.Trim();
@@ -108,7 +153,19 @@ app.MapPost("/api/matches", (CreateMatchDto dto, EventStore store) =>
         return Results.Conflict(new { message = "Bu maç kodu daha önce kullanılmış. Yeni bir maç kodu girin." });
     }
 
-    store.SetTeams(matchId, dto.HomeTeam.Trim(), dto.AwayTeam.Trim());
+    if (dto.HomeTeamId == dto.AwayTeamId)
+    {
+        return Results.BadRequest(new { message = "Ev sahibi ve deplasman takımı farklı olmalıdır." });
+    }
+
+    store.SetTeams(
+        matchId,
+        dto.HomeTeam.Trim(),
+        dto.AwayTeam.Trim(),
+        dto.HomeTeamId,
+        dto.AwayTeamId,
+        dto.HomeLogo,
+        dto.AwayLogo);
     return Results.Created($"/api/matches/{dto.MatchId}", new
     {
         id = matchId,
@@ -138,6 +195,7 @@ app.MapGet("/api/matches", (EventStore store) =>
         return new
         {
             id,
+            teams = store.GetTeams(id),
             homeTeam = snap.HomeTeam,
             awayTeam = snap.AwayTeam,
             home = snap.Home,
@@ -164,9 +222,52 @@ app.MapGet("/api/metrics", (MetricsCollector metrics) =>
 .WithName("GetMetrics")
 .WithTags("Monitoring");
 
+static void LoadEnvironmentFile()
+{
+    var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+    while (directory is not null)
+    {
+        var path = Path.Combine(directory.FullName, ".env");
+        if (File.Exists(path))
+        {
+            foreach (var line in File.ReadAllLines(path))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.Length == 0 || trimmed.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                var separator = trimmed.IndexOf('=');
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                var key = trimmed[..separator].Trim();
+                var value = trimmed[(separator + 1)..].Trim().Trim('"', '\'');
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(key)))
+                {
+                    Environment.SetEnvironmentVariable(key, value);
+                }
+            }
+            return;
+        }
+
+        directory = directory.Parent;
+    }
+}
+
 app.Run();
 
-public sealed record CreateMatchDto(string MatchId, string HomeTeam, string AwayTeam);
+public sealed record CreateMatchDto(
+    string MatchId,
+    string HomeTeam,
+    string AwayTeam,
+    int HomeTeamId,
+    int AwayTeamId,
+    string? HomeLogo,
+    string? AwayLogo);
 
 public sealed record EventDto(
     string Type,

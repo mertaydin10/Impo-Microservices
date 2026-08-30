@@ -92,52 +92,7 @@ if (urls.ContainsKey("LocalCrm"))
 
 if (urls.ContainsKey("Spectator"))
 {
-    const int matchCount = 20;
-    var teams = new[]
-    {
-        "Adana", "Ankara", "Antalya", "Bursa", "Denizli", "Eskişehir", "Gaziantep", "İstanbul",
-        "İzmir", "Kayseri", "Konya", "Mersin", "Samsun", "Sivas", "Trabzon", "Rize",
-        "Sakarya", "Kocaeli", "Manisa", "Malatya", "Hatay", "Ordu", "Boluspor", "Göztepe"
-    };
-    var playerNames = new[]
-    {
-        "A. Yıldız", "B. Kılıç", "C. Acar", "D. Kaya", "E. Şahin", "F. Demir",
-        "G. Arslan", "H. Koç", "K. Tekin", "M. Öztürk", "O. Güneş", "S. Yılmaz"
-    };
-    var random = new Random(42);
-    var totalEvents = 0;
-
-    for (var matchIndex = 1; matchIndex <= matchCount; matchIndex++)
-    {
-        var matchId = $"lig-{matchIndex:00}";
-        var homeTeam = teams[(matchIndex - 1) % teams.Length];
-        var awayTeam = teams[(matchIndex + 7) % teams.Length];
-        await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"{urls["Spectator"]}/api/matches/{matchId}"));
-        await client.PostAsJsonAsync($"{urls["Spectator"]}/api/matches", new { matchId, homeTeam, awayTeam });
-        await AddEvent(client, urls["Spectator"], matchId, "kickoff", 0, null, null, "Lig karşılaşması başladı");
-        totalEvents++;
-
-        var minute = 4;
-        var eventCount = random.Next(14, 25);
-        for (var eventIndex = 0; eventIndex < eventCount; eventIndex++)
-        {
-            minute = Math.Min(89, minute + random.Next(2, 7));
-            var roll = random.Next(100);
-            var type = roll < 32 ? "goal" : roll < 67 ? "card" : "sub";
-            var side = random.Next(2) == 0 ? "home" : "away";
-            var player = playerNames[random.Next(playerNames.Length)];
-            var playerIn = type == "sub" ? playerNames[random.Next(playerNames.Length)] : null;
-            var playerOut = type == "sub" ? player : null;
-            await AddEvent(client, urls["Spectator"], matchId, type, minute, side,
-                type == "sub" ? null : player, null, playerIn, playerOut);
-            totalEvents++;
-        }
-
-        await AddEvent(client, urls["Spectator"], matchId, "fulltime", 90, null, null, "Karşılaşma sona erdi");
-        totalEvents++;
-    }
-
-    Console.WriteLine($"  Spectator: {matchCount} maç ve {totalEvents} olay yazıldı");
+    Console.WriteLine("  Spectator: sentetik veri atlandı; kulüp ve oyuncular API-Football üzerinden seçilir");
 }
 
 if (urls.ContainsKey("PromptGateway"))
@@ -177,18 +132,3 @@ static string Normalize(string value) => value
     .Replace("ö", "o")
     .Replace("ş", "s")
     .Replace("ü", "u");
-
-static Task AddEvent(
-    HttpClient client,
-    string baseUrl,
-    string matchId,
-    string type,
-    int minute,
-    string? side,
-    string? player,
-    string? note = null,
-    string? playerIn = null,
-    string? playerOut = null) =>
-    client.PostAsJsonAsync(
-        $"{baseUrl}/api/matches/{matchId}/events",
-        new { type, minute, side, player, note, playerIn, playerOut });

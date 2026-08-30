@@ -5,6 +5,13 @@
 
 set -e
 
+# Yerel servis anahtarlarını ve ayarlarını yükle (.env Git tarafından izlenmez)
+if [ -f ".env" ]; then
+    set -a
+    source ".env"
+    set +a
+fi
+
 # Renkler
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'

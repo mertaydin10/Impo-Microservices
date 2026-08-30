@@ -6,7 +6,7 @@ namespace Spectator.Api;
 public sealed class EventStore
 {
     private readonly ConcurrentDictionary<string, List<MatchEvent>> _streams = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, (string Home, string Away)> _teams = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, MatchTeams> _teams = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _persistenceGate = new();
     private readonly string? _storagePath;
 
@@ -20,11 +20,27 @@ public sealed class EventStore
         Load();
     }
 
-    public void SetTeams(string matchId, string home, string away)
+    public void SetTeams(
+        string matchId,
+        string home,
+        string away,
+        int? homeTeamId = null,
+        int? awayTeamId = null,
+        string? homeLogo = null,
+        string? awayLogo = null)
     {
-        _teams[matchId] = (home, away);
+        _teams[matchId] = new MatchTeams(
+            home,
+            away,
+            homeTeamId,
+            awayTeamId,
+            homeLogo,
+            awayLogo);
         Persist();
     }
+
+    public MatchTeams? GetTeams(string matchId) =>
+        _teams.TryGetValue(matchId, out var teams) ? teams : null;
 
     public MatchEvent Append(string matchId, string type, string payloadJson, int offsetSeconds)
     {
@@ -134,7 +150,13 @@ public sealed class EventStore
             var matches = JsonSerializer.Deserialize<List<StoredMatch>>(File.ReadAllText(_storagePath)) ?? [];
             foreach (var match in matches)
             {
-                _teams[match.Id] = (match.HomeTeam, match.AwayTeam);
+                _teams[match.Id] = new MatchTeams(
+                    match.HomeTeam,
+                    match.AwayTeam,
+                    match.HomeTeamId,
+                    match.AwayTeamId,
+                    match.HomeLogo,
+                    match.AwayLogo);
                 _streams[match.Id] = match.Events;
             }
         }
@@ -156,9 +178,19 @@ public sealed class EventStore
             var ids = GetAllMatches();
             var matches = ids.Select(id =>
             {
-                var teams = _teams.TryGetValue(id, out var names) ? names : ("HOME", "AWAY");
+                var teams = _teams.TryGetValue(id, out var names)
+                    ? names
+                    : new MatchTeams("HOME", "AWAY");
                 var events = Stream(id).ToList();
-                return new StoredMatch(id, teams.Item1, teams.Item2, events);
+                return new StoredMatch(
+                    id,
+                    teams.Home,
+                    teams.Away,
+                    teams.HomeTeamId,
+                    teams.AwayTeamId,
+                    teams.HomeLogo,
+                    teams.AwayLogo,
+                    events);
             }).ToList();
 
             var directory = Path.GetDirectoryName(_storagePath);
@@ -177,5 +209,9 @@ public sealed class EventStore
         string Id,
         string HomeTeam,
         string AwayTeam,
+        int? HomeTeamId,
+        int? AwayTeamId,
+        string? HomeLogo,
+        string? AwayLogo,
         List<MatchEvent> Events);
 }

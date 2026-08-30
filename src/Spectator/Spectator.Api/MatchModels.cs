@@ -9,6 +9,14 @@ public sealed record MatchEvent(
     int OffsetSeconds,
     DateTimeOffset RecordedAt);
 
+public sealed record MatchTeams(
+    string Home,
+    string Away,
+    int? HomeTeamId = null,
+    int? AwayTeamId = null,
+    string? HomeLogo = null,
+    string? AwayLogo = null);
+
 public sealed record MatchSnapshot(
     string MatchId,
     string HomeTeam,

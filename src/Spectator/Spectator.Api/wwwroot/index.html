@@ -82,6 +82,7 @@
     .live-pill.finished { background: #e8ece9; color: #556159; }
     .scoreboard { padding: 36px 24px 30px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px; text-align: center; }
     .team-name { font-size: clamp(18px, 2vw, 26px); font-weight: 800; }
+    .team-logo { width: 72px; height: 72px; margin-bottom: 12px; object-fit: contain; }
     .score { font-size: clamp(56px, 7vw, 88px); line-height: 1; font-weight: 850; letter-spacing: -.06em; }
     .minute { margin-top: 10px; color: var(--green); font-size: 17px; font-weight: 750; }
 
@@ -140,6 +141,8 @@
     .dialog-actions { display: flex; gap: 9px; margin-top: 18px; }
     .dialog-actions button { flex: 1; padding: 10px; border-radius: 9px; font-weight: 700; }
     .cancel { border: 1px solid var(--line); background: white; }
+    .api-note { margin: -5px 0 15px; color: var(--muted); font-size: 12px; }
+    .api-note.error { color: var(--red); }
 
     @media (max-width: 1050px) {
       .layout { grid-template-columns: 220px 1fr; }
@@ -182,12 +185,12 @@
           <span id="matchState" class="live-pill">CANLI</span>
         </div>
         <div class="scoreboard">
-          <div><div id="homeTeam" class="team-name">Ev sahibi</div></div>
+          <div><img id="homeLogo" class="team-logo" alt="" hidden><div id="homeTeam" class="team-name">Ev sahibi</div></div>
           <div>
             <div class="score"><span id="homeScore">0</span> : <span id="awayScore">0</span></div>
             <div class="minute"><span id="clockMinute">0</span>'</div>
           </div>
-          <div><div id="awayTeam" class="team-name">Deplasman</div></div>
+          <div><img id="awayLogo" class="team-logo" alt="" hidden><div id="awayTeam" class="team-name">Deplasman</div></div>
         </div>
         <div class="replay">
           <div class="replay-head"><span>Zaman çizelgesi</span><span><strong id="replayMinute">0</strong>. dakika</span></div>
@@ -227,12 +230,12 @@
           </div>
           <div id="playerField" class="field">
             <label for="player">Oyuncu</label>
-            <input id="player" placeholder="Oyuncu adı">
+            <select id="player"><option value="">Oyuncu seçin</option></select>
           </div>
         </div>
         <div id="subFields" class="two" hidden>
-          <div class="field"><label for="playerOut">Çıkan</label><input id="playerOut" placeholder="Oyuncu adı"></div>
-          <div class="field"><label for="playerIn">Giren</label><input id="playerIn" placeholder="Oyuncu adı"></div>
+          <div class="field"><label for="playerOut">Çıkan</label><select id="playerOut"><option value="">Oyuncu seçin</option></select></div>
+          <div class="field"><label for="playerIn">Giren</label><select id="playerIn"><option value="">Oyuncu seçin</option></select></div>
         </div>
         <div class="field">
           <label for="note">Not <span style="font-weight:400">(isteğe bağlı)</span></label>
@@ -249,8 +252,9 @@
     <form id="newMatchForm" class="dialog-body">
       <h2 style="margin:0 0 18px;font-size:19px">Yeni maç oluştur</h2>
       <div class="field"><label for="newMatchId">Maç kodu</label><input id="newMatchId" placeholder="gs-fb" required></div>
-      <div class="field"><label for="newHomeTeam">Ev sahibi</label><input id="newHomeTeam" placeholder="Galatasaray" required></div>
-      <div class="field"><label for="newAwayTeam">Deplasman</label><input id="newAwayTeam" placeholder="Fenerbahçe" required></div>
+      <div id="footballApiNote" class="api-note">Güncel kulüpler API-Football üzerinden yükleniyor…</div>
+      <div class="field"><label for="newHomeTeam">Ev sahibi</label><select id="newHomeTeam" required><option value="">Kulüp seçin</option></select></div>
+      <div class="field"><label for="newAwayTeam">Deplasman</label><select id="newAwayTeam" required><option value="">Kulüp seçin</option></select></div>
       <div class="dialog-actions">
         <button id="cancelNewMatch" class="cancel" type="button">Vazgeç</button>
         <button class="primary" type="submit">Maçı oluştur</button>
@@ -262,6 +266,8 @@
     let currentMatchId = "";
     let matches = [];
     let events = [];
+    let footballTeams = [];
+    const squadCache = new Map();
     const byId = id => document.getElementById(id);
     const connection = new signalR.HubConnectionBuilder().withUrl("/hub/match").withAutomaticReconnect().build();
 
@@ -281,6 +287,49 @@
         return [teamLabel(event.side), change].filter(Boolean).join(" · ");
       }
       return event.note || "";
+    }
+
+    function setLogo(elementId, url, teamName) {
+      const image = byId(elementId);
+      image.hidden = !url;
+      image.src = url || "";
+      image.alt = url ? `${teamName} arması` : "";
+    }
+
+    function setPlayerOptions(players) {
+      const options = [
+        '<option value="">Oyuncu seçin</option>',
+        ...players.map(player =>
+          `<option value="${player.name}">${player.number ? `${player.number} · ` : ""}${player.name}${player.position ? ` · ${player.position}` : ""}</option>`)
+      ].join("");
+      ["player", "playerIn", "playerOut"].forEach(id => byId(id).innerHTML = options);
+    }
+
+    async function loadCurrentSquad() {
+      const match = matches.find(item => item.id === currentMatchId);
+      if (!match || match.isFinished) {
+        setPlayerOptions([]);
+        return;
+      }
+
+      const teamId = byId("side").value === "away"
+        ? match.teams?.awayTeamId
+        : match.teams?.homeTeamId;
+      if (!teamId) {
+        setPlayerOptions([]);
+        return;
+      }
+
+      if (!squadCache.has(teamId)) {
+        const response = await fetch(`/api/football/teams/${teamId}/squad`);
+        if (!response.ok) {
+          setPlayerOptions([]);
+          showMessage("Güncel kadro yüklenemedi. API anahtarını kontrol edin.", "error");
+          return;
+        }
+        squadCache.set(teamId, await response.json());
+      }
+      setPlayerOptions(squadCache.get(teamId));
     }
 
     function renderEvents() {
@@ -327,10 +376,13 @@
       byId("matchCode").textContent = currentMatchId;
       byId("homeTeam").textContent = match.homeTeam;
       byId("awayTeam").textContent = match.awayTeam;
+      setLogo("homeLogo", match.teams?.homeLogo, match.homeTeam);
+      setLogo("awayLogo", match.teams?.awayLogo, match.awayTeam);
       byId("replay").max = Math.max(90, lastMinute);
       byId("replay").value = lastMinute;
       byId("minute").value = Math.min(130, lastMinute + 1);
       setMatchFinished(match.isFinished);
+      await loadCurrentSquad();
       await loadSnapshot(lastMinute);
       renderEvents();
       renderMatchList();
@@ -371,6 +423,7 @@
       byId("sideField").hidden = !["goal", "card", "sub"].includes(type);
       byId("playerField").hidden = !["goal", "card"].includes(type);
       byId("subFields").hidden = type !== "sub";
+      if (["goal", "card", "sub"].includes(type)) loadCurrentSquad();
     }
 
     function showMessage(text, kind) {
@@ -404,16 +457,49 @@
     };
 
     byId("eventType").onchange = updateForm;
+    byId("side").onchange = loadCurrentSquad;
     byId("replay").oninput = event => loadSnapshot(Number(event.target.value));
 
-    byId("newMatchButton").onclick = () => byId("newMatchDialog").showModal();
+    async function loadFootballTeams() {
+      const note = byId("footballApiNote");
+      note.className = "api-note";
+      note.textContent = "Güncel kulüpler API-Football üzerinden yükleniyor…";
+      const response = await fetch("/api/football/teams?country=Turkey");
+      if (!response.ok) {
+        const error = await response.json();
+        note.className = "api-note error";
+        note.textContent = error.detail || "Kulüpler yüklenemedi.";
+        return;
+      }
+
+      footballTeams = await response.json();
+      const options = [
+        '<option value="">Kulüp seçin</option>',
+        ...footballTeams.map(team =>
+          `<option value="${team.id}" data-name="${team.name}" data-logo="${team.logo || ""}">${team.name}</option>`)
+      ].join("");
+      byId("newHomeTeam").innerHTML = options;
+      byId("newAwayTeam").innerHTML = options;
+      note.textContent = `${footballTeams.length} güncel kulüp yüklendi.`;
+    }
+
+    byId("newMatchButton").onclick = async () => {
+      byId("newMatchDialog").showModal();
+      if (!footballTeams.length) await loadFootballTeams();
+    };
     byId("cancelNewMatch").onclick = () => byId("newMatchDialog").close();
     byId("newMatchForm").onsubmit = async event => {
       event.preventDefault();
+      const home = byId("newHomeTeam").selectedOptions[0];
+      const away = byId("newAwayTeam").selectedOptions[0];
       const body = {
         matchId: byId("newMatchId").value.trim(),
-        homeTeam: byId("newHomeTeam").value.trim(),
-        awayTeam: byId("newAwayTeam").value.trim()
+        homeTeam: home.dataset.name,
+        awayTeam: away.dataset.name,
+        homeTeamId: Number(home.value),
+        awayTeamId: Number(away.value),
+        homeLogo: home.dataset.logo || null,
+        awayLogo: away.dataset.logo || null
       };
       const response = await fetch("/api/matches", {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
