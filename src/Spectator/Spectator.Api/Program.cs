@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.SignalR;
 using Spectator.Api;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,16 +53,58 @@ app.MapPost("/api/matches/{matchId}/events", async (
     MetricsCollector metrics,
     IHubContext<MatchHub> hub) =>
 {
-    var evt = store.Append(matchId, dto.Type, dto.PayloadJson ?? "{}", dto.OffsetSeconds);
-    var snap = store.Replay(matchId, dto.OffsetSeconds);
+    var allowedTypes = new[] { "kickoff", "goal", "card", "sub", "halftime", "fulltime" };
+    var type = dto.Type.Trim().ToLowerInvariant();
+    if (!allowedTypes.Contains(type))
+    {
+        return Results.BadRequest(new { message = "Geçersiz olay türü." });
+    }
+
+    if (type is "goal" or "card" or "sub" && dto.Side is not "home" and not "away")
+    {
+        return Results.BadRequest(new { message = "Bu olay için ev sahibi veya deplasman seçilmelidir." });
+    }
+
+    var offsetSeconds = dto.OffsetSeconds ?? Math.Max(0, dto.Minute) * 60;
+    var payload = dto.PayloadJson ?? JsonSerializer.Serialize(new
+    {
+        side = dto.Side,
+        player = dto.Player,
+        playerIn = dto.PlayerIn,
+        playerOut = dto.PlayerOut,
+        note = dto.Note
+    });
+    var evt = store.Append(matchId, type, payload, offsetSeconds);
+    var eventView = MatchEventView.From(evt);
+    var snap = store.Replay(matchId, offsetSeconds);
     
-    metrics.RecordEvent(matchId, dto.Type);
+    metrics.RecordEvent(matchId, type);
     
-    await hub.Clients.Group(matchId).SendAsync("event", evt);
+    await hub.Clients.Group(matchId).SendAsync("event", eventView);
     await hub.Clients.Group(matchId).SendAsync("snapshot", snap);
-    return Results.Ok(new { evt, snap });
+    return Results.Ok(new { @event = eventView, snapshot = snap });
 })
 .WithName("PostMatchEvent")
+.WithTags("Matches");
+
+app.MapPost("/api/matches", (CreateMatchDto dto, EventStore store) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.MatchId) ||
+        string.IsNullOrWhiteSpace(dto.HomeTeam) ||
+        string.IsNullOrWhiteSpace(dto.AwayTeam))
+    {
+        return Results.BadRequest(new { message = "Maç kodu ve takım adları zorunludur." });
+    }
+
+    store.SetTeams(dto.MatchId.Trim(), dto.HomeTeam.Trim(), dto.AwayTeam.Trim());
+    return Results.Created($"/api/matches/{dto.MatchId}", new
+    {
+        id = dto.MatchId.Trim(),
+        homeTeam = dto.HomeTeam.Trim(),
+        awayTeam = dto.AwayTeam.Trim()
+    });
+})
+.WithName("CreateMatch")
 .WithTags("Matches");
 
 app.MapGet("/api/matches/{matchId}/replay", (string matchId, int at, EventStore store) =>
@@ -70,7 +113,7 @@ app.MapGet("/api/matches/{matchId}/replay", (string matchId, int at, EventStore 
 .WithTags("Matches");
 
 app.MapGet("/api/matches/{matchId}/events", (string matchId, EventStore store) =>
-    Results.Ok(store.Stream(matchId)))
+    Results.Ok(store.Stream(matchId).Select(MatchEventView.From)))
 .WithName("GetMatchEvents")
 .WithTags("Matches");
 
@@ -110,4 +153,15 @@ app.MapGet("/api/metrics", (MetricsCollector metrics) =>
 
 app.Run();
 
-public sealed record EventDto(string Type, int OffsetSeconds, string? PayloadJson);
+public sealed record CreateMatchDto(string MatchId, string HomeTeam, string AwayTeam);
+
+public sealed record EventDto(
+    string Type,
+    int Minute = 0,
+    string? Side = null,
+    string? Player = null,
+    string? PlayerIn = null,
+    string? PlayerOut = null,
+    string? Note = null,
+    int? OffsetSeconds = null,
+    string? PayloadJson = null);

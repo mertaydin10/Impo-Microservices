@@ -1,253 +1,451 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Spectator — canlı maç</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spectator | Maç Merkezi</title>
   <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
   <style>
-    :root { color-scheme: dark; }
-    body { font-family: ui-sans-serif, system-ui; margin: 0; background: #0b1220; color: #e8eefc; }
-    main { max-width: 920px; margin: 0 auto; padding: 24px; }
-    h1 { font-weight: 650; letter-spacing: -0.03em; margin-bottom: 8px; }
-    .subtitle { color: #8aa0c7; margin-top: 0; margin-bottom: 24px; }
-    .score { display: flex; align-items: center; gap: 24px; font-size: 56px; font-variant-numeric: tabular-nums; }
-    .score small { font-size: 16px; display: block; color: #8aa0c7; }
-    .panel { background: #141c2e; border: 1px solid #243152; border-radius: 16px; padding: 16px; margin: 16px 0; }
-    .status { display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-    .status.live { background: #dc2626; color: white; animation: pulse 2s ease-in-out infinite; }
-    .status.connected { background: #16a34a; color: white; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-    input, select, button { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid #33456f; background: #0f1730; color: inherit; }
-    button { background: #3b82f6; border: 0; cursor: pointer; transition: all 0.2s; }
-    button:hover { background: #2563eb; transform: translateY(-1px); }
-    button.ghost { background: #1e2a48; }
-    button.ghost:hover { background: #2a3b5e; }
-    button.danger { background: #dc2626; }
-    button.danger:hover { background: #b91c1c; }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    ul { list-style: none; padding: 0; max-height: 400px; overflow-y: auto; }
-    li { padding: 8px 0; border-bottom: 1px solid #243152; color: #c5d4f0; font-size: 14px; animation: slideIn 0.3s; }
-    @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
-    li .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 8px; }
-    li .badge.goal { background: #16a34a; color: white; }
-    li .badge.card { background: #eab308; color: black; }
-    li .badge.sub { background: #6366f1; color: white; }
-    .howto { background: #1a2744; border-left: 4px solid #3b82f6; padding: 14px 16px; border-radius: 8px; line-height: 1.55; }
-    .howto ol { margin: 8px 0 0; padding-left: 1.2rem; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-    .stat-card { background: #0f1730; padding: 12px; border-radius: 8px; }
-    .stat-card .label { color: #8aa0c7; font-size: 12px; margin-bottom: 4px; }
-    .stat-card .value { font-size: 24px; font-weight: 600; }
+    :root {
+      --bg: #f3f5f2;
+      --surface: #fff;
+      --surface-soft: #f7f8f6;
+      --text: #17211b;
+      --muted: #69736d;
+      --line: #dfe4df;
+      --green: #08783f;
+      --green-soft: #e4f3ea;
+      --red: #d92d20;
+      --amber: #eaaa08;
+      --blue: #2870c7;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--text); background: var(--bg); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+
+    .topbar {
+      height: 64px;
+      padding: 0 28px;
+      background: #102219;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 750; font-size: 18px; }
+    .brand-mark { width: 32px; height: 32px; border-radius: 9px; background: var(--green); display: grid; place-items: center; }
+    .connection { display: flex; align-items: center; gap: 8px; color: #c8d3cc; font-size: 13px; }
+    .connection-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+    .connection.live .connection-dot { background: #49d17d; }
+
+    .layout {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 250px minmax(440px, 1fr) 320px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+    .card-title { margin: 0; font-size: 14px; font-weight: 750; }
+    .card-head { padding: 17px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+
+    .matches { overflow: hidden; }
+    .match-list { padding: 8px; display: grid; gap: 5px; }
+    .match-row {
+      width: 100%;
+      padding: 12px;
+      border: 0;
+      border-radius: 10px;
+      text-align: left;
+      background: transparent;
+      color: var(--text);
+    }
+    .match-row:hover { background: var(--surface-soft); }
+    .match-row.active { background: var(--green-soft); color: #075d33; }
+    .match-teams { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 650; }
+    .match-score { margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .match-row.active .match-score { color: #347454; }
+
+    .new-match { margin: 8px; width: calc(100% - 16px); padding: 10px; border: 1px dashed #9eaaa2; border-radius: 9px; background: transparent; color: var(--green); font-weight: 700; }
+    .new-match:hover { background: var(--green-soft); }
+
+    .score-card { overflow: hidden; }
+    .score-meta { padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    .live-pill { padding: 4px 8px; border-radius: 99px; background: #fee9e7; color: var(--red); font-weight: 750; font-size: 11px; letter-spacing: .04em; }
+    .scoreboard { padding: 36px 24px 30px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px; text-align: center; }
+    .team-name { font-size: clamp(18px, 2vw, 26px); font-weight: 800; }
+    .score { font-size: clamp(56px, 7vw, 88px); line-height: 1; font-weight: 850; letter-spacing: -.06em; }
+    .minute { margin-top: 10px; color: var(--green); font-size: 17px; font-weight: 750; }
+
+    .replay { padding: 16px 20px; background: var(--surface-soft); border-top: 1px solid var(--line); }
+    .replay-head { margin-bottom: 10px; display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+    input[type="range"] { width: 100%; accent-color: var(--green); }
+
+    .feed { margin-top: 20px; overflow: hidden; }
+    .event-list { padding: 8px 18px 18px; max-height: 450px; overflow: auto; }
+    .event {
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid #edf0ed;
+    }
+    .event:last-child { border-bottom: 0; }
+    .event-icon { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-soft); }
+    .event.goal .event-icon { background: var(--green-soft); }
+    .event.card .event-icon { background: #fff4ce; }
+    .event.sub .event-icon { background: #eaf2fb; }
+    .event-title { font-size: 14px; font-weight: 750; }
+    .event-detail { margin-top: 2px; color: var(--muted); font-size: 12px; }
+    .event-minute { font-size: 14px; font-weight: 800; color: var(--green); }
+    .empty { padding: 42px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    .event-form { overflow: hidden; }
+    .form-body { padding: 17px; }
+    .field { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 6px; color: #4e5b53; font-size: 12px; font-weight: 700; }
+    input, select {
+      width: 100%;
+      height: 42px;
+      padding: 0 11px;
+      color: var(--text);
+      background: white;
+      border: 1px solid #ccd3ce;
+      border-radius: 9px;
+    }
+    input:focus, select:focus { outline: 2px solid #a9d8bd; border-color: var(--green); }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .primary { width: 100%; padding: 11px; border: 0; border-radius: 9px; color: white; background: var(--green); font-weight: 750; }
+    .primary:hover { background: #066633; }
+    .danger-link { width: 100%; margin-top: 10px; padding: 8px; border: 0; background: transparent; color: var(--red); font-size: 12px; }
+    .hint { margin-top: 11px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .message { display: none; margin-bottom: 13px; padding: 9px 10px; border-radius: 8px; font-size: 12px; }
+    .message.error { display: block; color: #912018; background: #fee9e7; }
+    .message.success { display: block; color: #075d33; background: var(--green-soft); }
+
+    dialog { width: min(430px, calc(100% - 32px)); padding: 0; border: 0; border-radius: 14px; box-shadow: 0 24px 70px #0004; }
+    dialog::backdrop { background: #07110b99; }
+    .dialog-body { padding: 20px; }
+    .dialog-actions { display: flex; gap: 9px; margin-top: 18px; }
+    .dialog-actions button { flex: 1; padding: 10px; border-radius: 9px; font-weight: 700; }
+    .cancel { border: 1px solid var(--line); background: white; }
+
+    @media (max-width: 1050px) {
+      .layout { grid-template-columns: 220px 1fr; }
+      .event-form { grid-column: 1 / -1; }
+      .form-body { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .form-body .field { margin: 0; }
+      .form-body .message, .form-body .primary, .form-body .danger-link, .form-body .hint { grid-column: 1 / -1; }
+    }
+    @media (max-width: 720px) {
+      .topbar { padding: 0 16px; }
+      .layout { padding: 12px; grid-template-columns: 1fr; }
+      .matches { order: 2; }
+      .main { order: 1; }
+      .event-form { order: 3; grid-column: auto; }
+      .form-body { display: block; }
+      .form-body .field { margin-bottom: 15px; }
+      .scoreboard { gap: 12px; padding: 28px 12px; }
+    }
   </style>
 </head>
 <body>
-<main>
-  <h1>Spectator — Canlı maç skorbordu</h1>
-  <p class="subtitle">Event sourcing + SignalR ile gerçek zamanlı skor yayını <span id="status" class="status">Bağlanıyor...</span></p>
-  
-  <div class="howto">
-    <strong>Ne işe yarar?</strong> BeIN / Twitch izleyici ekranı gibi: gol yazılır, skor anında değişir. Altındaki çubukla maçı geri sararsın (34. saniyeye dönmek gibi).
-    <ol>
-      <li>Sayfa açılınca canlı yayın bağlantısı kendiliğinden kurulur.</li>
-      <li>Gol / takım seç → <b>Olay gönder</b>. HOME veya AWAY artar.</li>
-      <li>Alttaki kaydırıcıyı çek: skor o saniyedeki haline döner.</li>
-    </ol>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">S</span> Spectator</div>
+    <div id="connection" class="connection"><span class="connection-dot"></span><span id="connectionText">Bağlanıyor</span></div>
+  </header>
+
+  <div class="layout">
+    <aside class="card matches">
+      <div class="card-head"><h2 class="card-title">Maçlar</h2><span id="matchCount">0</span></div>
+      <div id="matchList" class="match-list"></div>
+      <button id="newMatchButton" class="new-match">+ Yeni maç</button>
+    </aside>
+
+    <main class="main">
+      <section class="card score-card">
+        <div class="score-meta">
+          <span id="matchCode">Maç seçilmedi</span>
+          <span class="live-pill">CANLI</span>
+        </div>
+        <div class="scoreboard">
+          <div><div id="homeTeam" class="team-name">Ev sahibi</div></div>
+          <div>
+            <div class="score"><span id="homeScore">0</span> : <span id="awayScore">0</span></div>
+            <div class="minute"><span id="clockMinute">0</span>'</div>
+          </div>
+          <div><div id="awayTeam" class="team-name">Deplasman</div></div>
+        </div>
+        <div class="replay">
+          <div class="replay-head"><span>Zaman çizelgesi</span><span><strong id="replayMinute">0</strong>. dakika</span></div>
+          <input id="replay" type="range" min="0" max="90" value="0">
+        </div>
+      </section>
+
+      <section class="card feed">
+        <div class="card-head"><h2 class="card-title">Olay akışı</h2><span id="eventCount">0 olay</span></div>
+        <div id="eventList" class="event-list"></div>
+      </section>
+    </main>
+
+    <aside class="card event-form">
+      <div class="card-head"><h2 class="card-title">Olay ekle</h2></div>
+      <form id="eventForm" class="form-body">
+        <div id="message" class="message"></div>
+        <div class="field">
+          <label for="eventType">Olay</label>
+          <select id="eventType">
+            <option value="goal">Gol</option>
+            <option value="card">Sarı kart</option>
+            <option value="sub">Oyuncu değişikliği</option>
+            <option value="kickoff">Maç başladı</option>
+            <option value="halftime">İlk yarı bitti</option>
+            <option value="fulltime">Maç bitti</option>
+          </select>
+        </div>
+        <div id="sideField" class="field">
+          <label for="side">Takım</label>
+          <select id="side"><option value="home">Ev sahibi</option><option value="away">Deplasman</option></select>
+        </div>
+        <div class="two">
+          <div class="field">
+            <label for="minute">Dakika</label>
+            <input id="minute" type="number" min="0" max="130" value="1">
+          </div>
+          <div id="playerField" class="field">
+            <label for="player">Oyuncu</label>
+            <input id="player" placeholder="Oyuncu adı">
+          </div>
+        </div>
+        <div id="subFields" class="two" hidden>
+          <div class="field"><label for="playerOut">Çıkan</label><input id="playerOut" placeholder="Oyuncu adı"></div>
+          <div class="field"><label for="playerIn">Giren</label><input id="playerIn" placeholder="Oyuncu adı"></div>
+        </div>
+        <div class="field">
+          <label for="note">Not <span style="font-weight:400">(isteğe bağlı)</span></label>
+          <input id="note" placeholder="Kısa açıklama">
+        </div>
+        <button class="primary" type="submit">Olayı kaydet</button>
+        <button id="clearMatch" class="danger-link" type="button">Bu maçın verilerini sil</button>
+        <div class="hint">Olaylar JSON yerine anlaşılır alanlarla kaydedilir ve ekranda okunabilir metin olarak gösterilir.</div>
+      </form>
+    </aside>
   </div>
-  
-  <div class="panel">
-    <div class="score">
-      <div><span id="homeLabel">HOME</span> <small id="home">0</small></div>
-      <div>–</div>
-      <div><span id="awayLabel">AWAY</span> <small id="away">0</small></div>
-    </div>
-    <p>Dakika: <strong id="clock">0</strong>s · maç <code id="matchName">gs-fb</code></p>
-  </div>
-  
-  <div class="panel">
-    <h3 style="margin-top: 0;">Kontrol paneli</h3>
-    <div class="row">
-      <input id="matchId" type="text" placeholder="Maç ID" value="gs-fb" style="width:10rem" />
-      <select id="matchPick" style="min-width:14rem"></select>
-      <button class="ghost" id="switchMatch">Maçı değiştir</button>
-      <button class="danger" id="clearMatch">Temizle</button>
-    </div>
-    <div class="row" style="margin-top: 12px;">
-      <select id="type">
-        <option value="goal">⚽ Gol</option>
-        <option value="card">🟨 Kart</option>
-        <option value="sub">🔄 Oyuncu değişikliği</option>
-      </select>
-      <select id="side">
-        <option value="home">🏠 Home</option>
-        <option value="away">✈️ Away</option>
-      </select>
-      <input id="offset" type="number" value="0" min="0" style="width:6rem" placeholder="Saniye" />
-      <button id="push">Olay gönder</button>
-    </div>
-    <p style="margin-top:16px; margin-bottom: 8px;">⏪ Replay — maçı herhangi bir anına sar
-      <input id="scrub" type="range" min="0" max="5400" value="0" style="width:70%" />
-      <strong><span id="scrubVal">0</span>s</strong>
-    </p>
-  </div>
-  
-  <div class="panel">
-    <h3 style="margin-top: 0;">📊 İstatistikler</h3>
-    <div class="stats">
-      <div class="stat-card">
-        <div class="label">Toplam olay</div>
-        <div class="value" id="statEvents">0</div>
+
+  <dialog id="newMatchDialog">
+    <form id="newMatchForm" class="dialog-body">
+      <h2 style="margin:0 0 18px;font-size:19px">Yeni maç oluştur</h2>
+      <div class="field"><label for="newMatchId">Maç kodu</label><input id="newMatchId" placeholder="gs-fb" required></div>
+      <div class="field"><label for="newHomeTeam">Ev sahibi</label><input id="newHomeTeam" placeholder="Galatasaray" required></div>
+      <div class="field"><label for="newAwayTeam">Deplasman</label><input id="newAwayTeam" placeholder="Fenerbahçe" required></div>
+      <div class="dialog-actions">
+        <button id="cancelNewMatch" class="cancel" type="button">Vazgeç</button>
+        <button class="primary" type="submit">Maçı oluştur</button>
       </div>
-      <div class="stat-card">
-        <div class="label">Aktif bağlantı</div>
-        <div class="value" id="statConnections">1</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Son olay</div>
-        <div class="value" id="statLastEvent">—</div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="panel">
-    <h3 style="margin-top: 0;">📋 Olay akışı</h3>
-    <ul id="log"></ul>
-  </div>
-</main>
-<script>
-  let currentMatchId = "gs-fb";
-  const log = document.getElementById("log");
-  const conn = new signalR.HubConnectionBuilder().withUrl("/hub/match").withAutomaticReconnect().build();
-  let eventCount = 0;
+    </form>
+  </dialog>
 
-  function updateStatus(text, className) {
-    const status = document.getElementById("status");
-    status.textContent = text;
-    status.className = "status " + className;
-  }
+  <script>
+    let currentMatchId = "";
+    let matches = [];
+    let events = [];
+    const byId = id => document.getElementById(id);
+    const connection = new signalR.HubConnectionBuilder().withUrl("/hub/match").withAutomaticReconnect().build();
 
-  function renderSnap(s) {
-    document.getElementById("home").textContent = s.home;
-    document.getElementById("away").textContent = s.away;
-    document.getElementById("clock").textContent = s.clockSeconds;
-    if (s.homeTeam) document.getElementById("homeLabel").textContent = s.homeTeam;
-    if (s.awayTeam) document.getElementById("awayLabel").textContent = s.awayTeam;
-  }
+    const icons = { kickoff: "▶", goal: "⚽", card: "■", sub: "↔", halftime: "Ⅱ", fulltime: "■" };
 
-  function addLog(e) {
-    const li = document.createElement("li");
-    const badge = document.createElement("span");
-    badge.className = `badge ${e.type}`;
-    badge.textContent = e.type.toUpperCase();
-    li.appendChild(badge);
-    li.appendChild(document.createTextNode(`${Math.floor(e.offsetSeconds / 60)}'  ${e.payloadJson}`));
-    log.prepend(li);
-  }
-
-  conn.on("snapshot", renderSnap);
-  conn.on("event", e => {
-    eventCount++;
-    document.getElementById("statEvents").textContent = eventCount;
-    document.getElementById("statLastEvent").textContent = e.type;
-    addLog(e);
-  });
-
-  conn.onreconnecting(() => updateStatus("Yeniden bağlanıyor...", ""));
-  conn.onreconnected(() => {
-    updateStatus("CANLI", "live");
-    join().catch(() => {});
-  });
-  conn.onclose(() => updateStatus("Bağlantı kesildi", ""));
-
-  async function join() {
-    if (conn.state !== "Connected") {
-      await conn.start();
-      updateStatus("CANLI", "live");
+    function teamLabel(side) {
+      const match = matches.find(item => item.id === currentMatchId);
+      if (!match) return "";
+      return side === "away" ? match.awayTeam : match.homeTeam;
     }
-    await conn.invoke("JoinMatch", currentMatchId);
-  }
 
-  async function loadBoard() {
-    log.innerHTML = "";
-    const events = await (await fetch(`/api/matches/${currentMatchId}/events`)).json();
-    eventCount = events.length;
-    document.getElementById("statEvents").textContent = eventCount;
-    document.getElementById("matchName").textContent = currentMatchId;
-    document.getElementById("matchId").value = currentMatchId;
-    events.forEach(addLog);
-    const last = events.reduce((m, e) => Math.max(m, e.offsetSeconds || 0), 0);
-    document.getElementById("scrub").max = Math.max(5400, last);
-    document.getElementById("scrub").value = last;
-    document.getElementById("scrubVal").textContent = last;
-    document.getElementById("offset").value = last + 30;
-    const snap = await (await fetch(`/api/matches/${currentMatchId}/replay?at=${last}`)).json();
-    renderSnap(snap);
-  }
+    function eventDetail(event) {
+      if (event.type === "goal") return [teamLabel(event.side), event.player].filter(Boolean).join(" · ");
+      if (event.type === "card") return [teamLabel(event.side), event.player].filter(Boolean).join(" · ");
+      if (event.type === "sub") {
+        const change = [event.playerOut, event.playerIn].filter(Boolean).join(" → ");
+        return [teamLabel(event.side), change].filter(Boolean).join(" · ");
+      }
+      return event.note || "";
+    }
 
-  async function refreshMatchList() {
-    const list = await (await fetch("/api/matches")).json();
-    const pick = document.getElementById("matchPick");
-    pick.innerHTML = list.map(m =>
-      `<option value="${m.id}">${m.homeTeam} ${m.home}–${m.away} ${m.awayTeam} (${m.events} olay)</option>`
-    ).join("");
-    pick.value = currentMatchId;
-  }
+    function renderEvents() {
+      byId("eventCount").textContent = `${events.length} olay`;
+      if (!events.length) {
+        byId("eventList").innerHTML = '<div class="empty">Bu maç için henüz olay eklenmedi.</div>';
+        return;
+      }
+      byId("eventList").innerHTML = [...events].sort((a, b) => b.offsetSeconds - a.offsetSeconds).map(event => `
+        <article class="event ${event.type}">
+          <div class="event-icon">${icons[event.type] || "•"}</div>
+          <div>
+            <div class="event-title">${event.typeLabel}</div>
+            <div class="event-detail">${eventDetail(event) || "Maç olayı"}</div>
+          </div>
+          <div class="event-minute">${event.minute}'</div>
+        </article>`).join("");
+    }
 
-  document.getElementById("matchPick").onchange = async () => {
-    currentMatchId = document.getElementById("matchPick").value;
-    await join();
-    await loadBoard();
-  };
+    function renderMatchList() {
+      byId("matchCount").textContent = matches.length;
+      byId("matchList").innerHTML = matches.map(match => `
+        <button class="match-row ${match.id === currentMatchId ? "active" : ""}" data-id="${match.id}">
+          <div class="match-teams"><span>${match.homeTeam}</span><strong>${match.home} - ${match.away}</strong></div>
+          <div class="match-score">${match.awayTeam} · ${match.events} olay</div>
+        </button>`).join("");
+      document.querySelectorAll(".match-row").forEach(button => button.onclick = () => selectMatch(button.dataset.id));
+    }
 
-  join().then(async () => {
-    await refreshMatchList();
-    await loadBoard();
-  }).catch(() => {});
+    async function loadMatches(preferredId) {
+      const response = await fetch("/api/matches");
+      matches = await response.json();
+      if (!currentMatchId) currentMatchId = preferredId || matches[0]?.id || "";
+      renderMatchList();
+      if (currentMatchId) await loadMatch();
+    }
 
-  document.getElementById("switchMatch").onclick = async () => {
-    currentMatchId = document.getElementById("matchId").value || "gs-fb";
-    document.getElementById("matchName").textContent = currentMatchId;
-    log.innerHTML = "";
-    eventCount = 0;
-    document.getElementById("statEvents").textContent = "0";
-    await join();
-    await loadBoard();
-    await refreshMatchList();
-  };
+    async function loadMatch() {
+      const match = matches.find(item => item.id === currentMatchId);
+      if (!match) return;
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/events`);
+      events = await response.json();
+      const lastMinute = events.reduce((max, event) => Math.max(max, event.minute), 0);
+      byId("matchCode").textContent = currentMatchId;
+      byId("homeTeam").textContent = match.homeTeam;
+      byId("awayTeam").textContent = match.awayTeam;
+      byId("replay").max = Math.max(90, lastMinute);
+      byId("replay").value = lastMinute;
+      byId("minute").value = Math.min(130, lastMinute + 1);
+      await loadSnapshot(lastMinute);
+      renderEvents();
+      renderMatchList();
+    }
 
-  document.getElementById("clearMatch").onclick = async () => {
-    if (!confirm(`"${currentMatchId}" maçının tüm olaylarını silmek istediğinize emin misiniz?`)) return;
-    await fetch(`/api/matches/${currentMatchId}`, { method: "DELETE" });
-    log.innerHTML = "";
-    eventCount = 0;
-    document.getElementById("statEvents").textContent = "0";
-    document.getElementById("home").textContent = "0";
-    document.getElementById("away").textContent = "0";
-    document.getElementById("clock").textContent = "0";
-  };
+    async function loadSnapshot(minute) {
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/replay?at=${minute * 60}`);
+      const snapshot = await response.json();
+      byId("homeScore").textContent = snapshot.home;
+      byId("awayScore").textContent = snapshot.away;
+      byId("clockMinute").textContent = minute;
+      byId("replayMinute").textContent = minute;
+    }
 
-  document.getElementById("push").onclick = async () => {
-    const type = document.getElementById("type").value;
-    const side = document.getElementById("side").value;
-    const offset = Number(document.getElementById("offset").value);
-    const res = await fetch(`/api/matches/${currentMatchId}/events`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type, offsetSeconds: offset, payloadJson: JSON.stringify({ side }) })
+    async function selectMatch(matchId) {
+      currentMatchId = matchId;
+      if (connection.state === signalR.HubConnectionState.Connected) {
+        await connection.invoke("JoinMatch", currentMatchId);
+      }
+      await loadMatch();
+    }
+
+    function updateForm() {
+      const type = byId("eventType").value;
+      byId("sideField").hidden = !["goal", "card", "sub"].includes(type);
+      byId("playerField").hidden = !["goal", "card"].includes(type);
+      byId("subFields").hidden = type !== "sub";
+    }
+
+    function showMessage(text, kind) {
+      byId("message").textContent = text;
+      byId("message").className = `message ${kind}`;
+      setTimeout(() => byId("message").className = "message", 2500);
+    }
+
+    byId("eventForm").onsubmit = async event => {
+      event.preventDefault();
+      if (!currentMatchId) return showMessage("Önce bir maç oluşturun.", "error");
+      const body = {
+        type: byId("eventType").value,
+        minute: Number(byId("minute").value),
+        side: byId("side").value,
+        player: byId("player").value.trim() || null,
+        playerIn: byId("playerIn").value.trim() || null,
+        playerOut: byId("playerOut").value.trim() || null,
+        note: byId("note").value.trim() || null
+      };
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/events`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        return showMessage(error.message || "Olay kaydedilemedi.", "error");
+      }
+      byId("player").value = byId("playerIn").value = byId("playerOut").value = byId("note").value = "";
+      showMessage("Olay kaydedildi.", "success");
+      await loadMatches(currentMatchId);
+    };
+
+    byId("eventType").onchange = updateForm;
+    byId("replay").oninput = event => loadSnapshot(Number(event.target.value));
+
+    byId("newMatchButton").onclick = () => byId("newMatchDialog").showModal();
+    byId("cancelNewMatch").onclick = () => byId("newMatchDialog").close();
+    byId("newMatchForm").onsubmit = async event => {
+      event.preventDefault();
+      const body = {
+        matchId: byId("newMatchId").value.trim(),
+        homeTeam: byId("newHomeTeam").value.trim(),
+        awayTeam: byId("newAwayTeam").value.trim()
+      };
+      const response = await fetch("/api/matches", {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
+      });
+      if (!response.ok) return;
+      currentMatchId = body.matchId;
+      byId("newMatchDialog").close();
+      byId("newMatchForm").reset();
+      await connection.invoke("JoinMatch", currentMatchId);
+      await loadMatches(currentMatchId);
+    };
+
+    byId("clearMatch").onclick = async () => {
+      if (!currentMatchId || !confirm("Bu maçın tüm olaylarını silmek istediğinize emin misiniz?")) return;
+      await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}`, { method: "DELETE" });
+      currentMatchId = "";
+      await loadMatches();
+    };
+
+    connection.on("event", async event => {
+      if (event.matchId !== currentMatchId) return;
+      events.push(event);
+      await loadMatches(currentMatchId);
     });
-    const data = await res.json();
-    if (data.snap) renderSnap(data.snap);
-    document.getElementById("offset").value = offset + 30;
-    document.getElementById("scrub").value = offset;
-    document.getElementById("scrubVal").textContent = offset;
-  };
+    connection.on("snapshot", snapshot => {
+      if (snapshot.matchId !== currentMatchId) return;
+      byId("homeScore").textContent = snapshot.home;
+      byId("awayScore").textContent = snapshot.away;
+    });
+    connection.onreconnecting(() => {
+      byId("connectionText").textContent = "Yeniden bağlanıyor";
+      byId("connection").classList.remove("live");
+    });
+    connection.onreconnected(() => selectMatch(currentMatchId));
+    connection.onclose(() => {
+      byId("connectionText").textContent = "Bağlantı kesildi";
+      byId("connection").classList.remove("live");
+    });
 
-  document.getElementById("scrub").oninput = async (ev) => {
-    const at = Number(ev.target.value);
-    document.getElementById("scrubVal").textContent = at;
-    const res = await fetch(`/api/matches/${currentMatchId}/replay?at=${at}`);
-    renderSnap(await res.json());
-  };
-</script>
+    async function start() {
+      updateForm();
+      await connection.start();
+      byId("connectionText").textContent = "Canlı bağlantı";
+      byId("connection").classList.add("live");
+      await loadMatches("gs-fb");
+      if (currentMatchId) await connection.invoke("JoinMatch", currentMatchId);
+    }
+
+    start().catch(() => {
+      byId("connectionText").textContent = "Bağlantı kurulamadı";
+    });
+  </script>
 </body>
 </html>
