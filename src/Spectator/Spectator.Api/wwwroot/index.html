@@ -73,12 +73,13 @@
     .match-score { margin-top: 5px; color: var(--muted); font-size: 12px; }
     .match-row.active .match-score { color: #347454; }
 
-    .new-match { margin: 8px; width: calc(100% - 16px); padding: 10px; border: 1px dashed #9eaaa2; border-radius: 9px; background: transparent; color: var(--green); font-weight: 700; }
+    .new-match { padding: 7px 10px; border: 1px solid #9bc6ad; border-radius: 8px; background: var(--green-soft); color: var(--green); font-size: 12px; font-weight: 750; }
     .new-match:hover { background: var(--green-soft); }
 
     .score-card { overflow: hidden; }
     .score-meta { padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
     .live-pill { padding: 4px 8px; border-radius: 99px; background: #fee9e7; color: var(--red); font-weight: 750; font-size: 11px; letter-spacing: .04em; }
+    .live-pill.finished { background: #e8ece9; color: #556159; }
     .scoreboard { padding: 36px 24px 30px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px; text-align: center; }
     .team-name { font-size: clamp(18px, 2vw, 26px); font-weight: 800; }
     .score { font-size: clamp(56px, 7vw, 88px); line-height: 1; font-weight: 850; letter-spacing: -.06em; }
@@ -122,6 +123,8 @@
       border-radius: 9px;
     }
     input:focus, select:focus { outline: 2px solid #a9d8bd; border-color: var(--green); }
+    input:disabled, select:disabled, button:disabled { cursor: not-allowed; opacity: .52; }
+    .event-form.locked .form-body { background: #f7f8f6; }
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .primary { width: 100%; padding: 11px; border: 0; border-radius: 9px; color: white; background: var(--green); font-weight: 750; }
     .primary:hover { background: #066633; }
@@ -165,16 +168,18 @@
 
   <div class="layout">
     <aside class="card matches">
-      <div class="card-head"><h2 class="card-title">Maçlar</h2><span id="matchCount">0</span></div>
+      <div class="card-head">
+        <h2 class="card-title">Maçlar <span id="matchCount" style="color:var(--muted);font-weight:500">0</span></h2>
+        <button id="newMatchButton" class="new-match">+ Yeni maç</button>
+      </div>
       <div id="matchList" class="match-list"></div>
-      <button id="newMatchButton" class="new-match">+ Yeni maç</button>
     </aside>
 
     <main class="main">
       <section class="card score-card">
         <div class="score-meta">
           <span id="matchCode">Maç seçilmedi</span>
-          <span class="live-pill">CANLI</span>
+          <span id="matchState" class="live-pill">CANLI</span>
         </div>
         <div class="scoreboard">
           <div><div id="homeTeam" class="team-name">Ev sahibi</div></div>
@@ -235,7 +240,7 @@
         </div>
         <button class="primary" type="submit">Olayı kaydet</button>
         <button id="clearMatch" class="danger-link" type="button">Bu maçın verilerini sil</button>
-        <div class="hint">Olaylar JSON yerine anlaşılır alanlarla kaydedilir ve ekranda okunabilir metin olarak gösterilir.</div>
+        <div class="hint">Kayıtlı ve bitmiş maçlar salt okunurdur. Yalnızca yeni oluşturduğunuz maça, “Maç bitti” olayını kaydedene kadar veri girebilirsiniz.</div>
       </form>
     </aside>
   </div>
@@ -300,7 +305,7 @@
       byId("matchList").innerHTML = matches.map(match => `
         <button class="match-row ${match.id === currentMatchId ? "active" : ""}" data-id="${match.id}">
           <div class="match-teams"><span>${match.homeTeam}</span><strong>${match.home} - ${match.away}</strong></div>
-          <div class="match-score">${match.awayTeam} · ${match.events} olay</div>
+          <div class="match-score">${match.awayTeam} · ${match.isFinished ? "Bitti" : "Canlı"} · ${match.events} olay</div>
         </button>`).join("");
       document.querySelectorAll(".match-row").forEach(button => button.onclick = () => selectMatch(button.dataset.id));
     }
@@ -325,9 +330,23 @@
       byId("replay").max = Math.max(90, lastMinute);
       byId("replay").value = lastMinute;
       byId("minute").value = Math.min(130, lastMinute + 1);
+      setMatchFinished(match.isFinished);
       await loadSnapshot(lastMinute);
       renderEvents();
       renderMatchList();
+    }
+
+    function setMatchFinished(isFinished) {
+      const state = byId("matchState");
+      state.textContent = isFinished ? "BİTTİ" : "CANLI";
+      state.classList.toggle("finished", isFinished);
+      document.querySelector(".event-form").classList.toggle("locked", isFinished);
+      byId("eventForm").querySelectorAll("input, select, button[type='submit']").forEach(control => {
+        control.disabled = isFinished;
+      });
+      if (isFinished) {
+        showMessage("Bu maç tamamlandı. Yeni olay eklenemez.", "error");
+      }
     }
 
     async function loadSnapshot(minute) {
@@ -399,7 +418,11 @@
       const response = await fetch("/api/matches", {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body)
       });
-      if (!response.ok) return;
+      if (!response.ok) {
+        const error = await response.json();
+        alert(error.message || "Maç oluşturulamadı.");
+        return;
+      }
       currentMatchId = body.matchId;
       byId("newMatchDialog").close();
       byId("newMatchForm").reset();
