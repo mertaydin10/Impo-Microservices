@@ -69,6 +69,7 @@ PublishProfiles/
 
 # Local CRM data
 cloud.db
+**/data/
 
 # Temp files
 *.tmp
