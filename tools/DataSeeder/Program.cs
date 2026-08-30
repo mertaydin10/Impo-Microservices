@@ -1,149 +1,91 @@
 using System.Net.Http.Json;
-using System.Text.Json;
-using Bogus;
 
-Console.WriteLine("🌱 Impo Data Seeder - Generating realistic test data...\n");
+Console.WriteLine("Impo örnek veri yükleyici\n");
 
-// Check if services are running
-var baseUrls = new Dictionary<string, string>
+var candidates = new Dictionary<string, string>
 {
     ["LocalCrm"] = "http://localhost:5057",
     ["Spectator"] = "http://localhost:5185",
     ["PromptGateway"] = "http://localhost:5047"
 };
 
-var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+var urls = new Dictionary<string, string>();
 
-// Check service availability
-Console.WriteLine("📡 Checking service availability...");
-var availableServices = new List<string>();
-foreach (var (name, url) in baseUrls)
+foreach (var (name, url) in candidates)
 {
     try
     {
-        var response = await client.GetAsync($"{url}/health");
-        if (response.IsSuccessStatusCode)
+        if ((await client.GetAsync($"{url}/health")).IsSuccessStatusCode)
         {
-            Console.WriteLine($"  ✓ {name} is online");
-            availableServices.Add(name);
+            urls[name] = url;
+            Console.WriteLine($"  {name} açık");
         }
         else
         {
-            Console.WriteLine($"  ✗ {name} is offline (will skip)");
+            Console.WriteLine($"  {name} kapalı");
         }
     }
     catch
     {
-        Console.WriteLine($"  ✗ {name} is offline (will skip)");
+        Console.WriteLine($"  {name} kapalı — atlanıyor");
     }
 }
-Console.WriteLine();
 
-// Seed LocalCrm contacts
-if (availableServices.Contains("LocalCrm"))
+if (urls.ContainsKey("LocalCrm"))
 {
-    Console.WriteLine("👥 Seeding LocalCrm contacts...");
-    
-    var contactFaker = new Faker<Contact>()
-        .RuleFor(c => c.Id, f => Guid.NewGuid())
-        .RuleFor(c => c.Name, f => new FieldClock 
-        { 
-            Value = f.Name.FullName(), 
-            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-f.Random.Int(0, 30)), 
-            DeviceId = "seeder" 
-        })
-        .RuleFor(c => c.Email, f => new FieldClock 
-        { 
-            Value = f.Internet.Email(), 
-            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-f.Random.Int(0, 30)), 
-            DeviceId = "seeder" 
-        })
-        .RuleFor(c => c.Phone, f => new FieldClock 
-        { 
-            Value = f.Phone.PhoneNumber("###-###-####"), 
-            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-f.Random.Int(0, 30)), 
-            DeviceId = "seeder" 
-        })
-        .RuleFor(c => c.Company, f => new FieldClock 
-        { 
-            Value = f.Company.CompanyName(), 
-            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-f.Random.Int(0, 30)), 
-            DeviceId = "seeder" 
-        });
+    var device = "seeder";
+    var now = DateTimeOffset.UtcNow;
+    var contacts = new[]
+    {
+        Make(Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111"), "Ayşe Güneş", "ayse.gunes@delta.example", "05321112233", "Delta Enerji", "Saha tableti siparişi", device, now),
+        Make(Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222"), "Burak Çelik", "burak.celik@orman.example", "05446667788", "Orman Mobilya", "ERP .NET geçişi", device, now.AddDays(-3)),
+        Make(Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333"), "Deniz Koç", "deniz.koc@liman.example", "05359876543", "Kuzey Liman", "gRPC skor yayını", device, now.AddDays(-1))
+    };
 
-    var contacts = contactFaker.Generate(20);
-    
-    try
-    {
-        var syncBatch = new { contacts };
-        var response = await client.PostAsJsonAsync($"{baseUrls["LocalCrm"]}/sync", syncBatch);
-        
-        if (response.IsSuccessStatusCode)
-        {
-            Console.WriteLine($"  ✓ Created {contacts.Count} contacts");
-        }
-        else
-        {
-            var error = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"  ✗ Failed: {error}");
-        }
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"  ✗ Error: {ex.Message}");
-    }
+    var res = await client.PostAsJsonAsync($"{urls["LocalCrm"]}/sync", new { contacts });
+    Console.WriteLine(res.IsSuccessStatusCode ? $"  CRM: {contacts.Length} kişi gönderildi" : $"  CRM hata: {await res.Content.ReadAsStringAsync()}");
 }
 
-// Seed Spectator match events
-if (availableServices.Contains("Spectator"))
+if (urls.ContainsKey("Spectator"))
 {
-    Console.WriteLine("\n🏟️  Seeding Spectator match events...");
-    
-    var matchIds = new[] { "match-real-vs-barca", "match-chelsea-vs-bayern", "match-psg-vs-milan" };
-    var eventTypes = new[] { "kick-off", "goal", "yellow-card", "substitution", "half-time", "full-time" };
-    
-    foreach (var matchId in matchIds)
+    const string matchId = "seeded-cup";
+    var events = new (string Type, int Offset, string Json)[]
     {
-        var eventCount = Random.Shared.Next(8, 15);
-        
-        for (int i = 0; i < eventCount; i++)
-        {
-            var eventDto = new
-            {
-                type = eventTypes[Random.Shared.Next(eventTypes.Length)],
-                offsetSeconds = Random.Shared.Next(1, 90) * 60,
-                payloadJson = JsonSerializer.Serialize(new { player = $"Player {i + 1}", minute = Random.Shared.Next(1, 90) })
-            };
-            
-            try
-            {
-                await client.PostAsJsonAsync($"{baseUrls["Spectator"]}/api/matches/{matchId}/events", eventDto);
-            }
-            catch { }
-        }
-        
-        Console.WriteLine($"  ✓ Created {eventCount} events for {matchId}");
+        ("kickoff", 0, """{"note":"Kupa finali"}"""),
+        ("goal", 600, """{"side":"home","player":"A. Yıldız"}"""),
+        ("goal", 2100, """{"side":"away","player":"B. Kılıç"}"""),
+        ("goal", 3300, """{"side":"home","player":"C. Acar"}""")
+    };
+
+    await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"{urls["Spectator"]}/api/matches/{matchId}"));
+    foreach (var e in events)
+    {
+        await client.PostAsJsonAsync($"{urls["Spectator"]}/api/matches/{matchId}/events",
+            new { type = e.Type, offsetSeconds = e.Offset, payloadJson = e.Json });
     }
+
+    Console.WriteLine("  Spectator: seeded-cup maçı yazıldı");
 }
 
-Console.WriteLine("\n✅ Data seeding complete!");
-Console.WriteLine("\n📊 You can now:");
-Console.WriteLine("  • View contacts: http://localhost:5209");
-Console.WriteLine("  • View matches: http://localhost:5185");
-Console.WriteLine("  • Check API: http://localhost:5057/swagger");
-
-// Models
-public record Contact(
-    Guid Id,
-    FieldClock Name,
-    FieldClock Email,
-    FieldClock Phone,
-    FieldClock Company
-);
-
-public record FieldClock
+if (urls.ContainsKey("PromptGateway"))
 {
-    public required string Value { get; init; }
-    public required DateTimeOffset UpdatedAt { get; init; }
-    public required string DeviceId { get; init; }
+    await client.PostAsJsonAsync(
+        $"{urls["PromptGateway"]}/v1/chat/completions",
+        new { model = "gpt-4o-mini", messages = new[] { new { role = "user", content = "Sipariş durumu nedir?" } } });
+    Console.WriteLine("  Gateway: örnek istek atıldı");
 }
+
+Console.WriteLine("\nBitti. CRM http://localhost:5209  |  Maç http://localhost:5185");
+
+static object Make(Guid id, string name, string email, string phone, string company, string notes, string device, DateTimeOffset at) => new
+{
+    id,
+    name = F(name, at, device),
+    email = F(email, at, device),
+    phone = F(phone, at, device),
+    company = F(company, at, device),
+    notes = F(notes, at, device)
+};
+
+static object F(string value, DateTimeOffset at, string device) => new { value, updatedAt = at, deviceId = device };
