@@ -82,6 +82,57 @@ public class EventStoreTests
         
         Assert.Empty(events);
     }
+
+    [Fact]
+    public void Append_WhenMatchIsFinished_RejectsNewEvent()
+    {
+        var store = new EventStore();
+        store.Append("match-1", "fulltime", "{}", 90 * 60);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            store.Append("match-1", "goal", """{"side":"home"}""", 91 * 60));
+
+        Assert.Equal("Biten maça yeni olay eklenemez.", error.Message);
+        Assert.True(store.IsFinished("match-1"));
+        Assert.Single(store.Stream("match-1"));
+    }
+
+    [Fact]
+    public void Clear_WhenMatchIsFinished_AllowsFreshMatch()
+    {
+        var store = new EventStore();
+        store.Append("match-1", "fulltime", "{}", 90 * 60);
+
+        store.Clear("match-1");
+        var newEvent = store.Append("match-1", "kickoff", "{}", 0);
+
+        Assert.False(store.IsFinished("match-1"));
+        Assert.Equal("kickoff", newEvent.Type);
+    }
+
+    [Fact]
+    public void PersistentStore_AfterRestart_KeepsFinishedMatchReadOnly()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"spectator-{Guid.NewGuid():N}.json");
+        try
+        {
+            var firstInstance = new EventStore(path);
+            firstInstance.SetTeams("match-1", "Ev", "Deplasman");
+            firstInstance.Append("match-1", "fulltime", "{}", 90 * 60);
+
+            var restartedInstance = new EventStore(path);
+
+            Assert.True(restartedInstance.Exists("match-1"));
+            Assert.True(restartedInstance.IsFinished("match-1"));
+            Assert.Throws<InvalidOperationException>(() =>
+                restartedInstance.Append("match-1", "goal", """{"side":"home"}""", 91 * 60));
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete($"{path}.tmp");
+        }
+    }
 }
 
 public class MetricsCollectorTests
