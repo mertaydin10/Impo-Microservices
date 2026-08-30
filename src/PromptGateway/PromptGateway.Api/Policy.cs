@@ -107,7 +107,18 @@ public sealed class AuditLog
         while (_rows.Count > 200 && _rows.TryDequeue(out _)) { }
     }
 
-    public IReadOnlyList<AuditRow> Recent() => _rows.Reverse().Take(50).ToList();
+    public void SeedDemo()
+    {
+        if (!_rows.IsEmpty)
+        {
+            return;
+        }
+
+        Add(new AuditRow(DateTimeOffset.UtcNow.AddHours(-3), "sales-desk", "company-fast", 38, "/v1/chat/completions", "Teklif özeti: müşteri [EMAIL]"));
+        Add(new AuditRow(DateTimeOffset.UtcNow.AddHours(-2), "support", "company-strong", 91, "/v1/chat/completions", "Ticket #4412 — IP [IP]"));
+        Add(new AuditRow(DateTimeOffset.UtcNow.AddHours(-1), "team-a", "company-strong", 54, "/v1/chat/completions", "Kart bilgisi [CARD] gizlendi"));
+        Add(new AuditRow(DateTimeOffset.UtcNow.AddMinutes(-20), "hr-bot", "company-fast", 22, "/v1/chat/completions", "Aday telefon [PHONE]"));
+    }
 }
 
 public sealed class ModelRouter

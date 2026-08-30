@@ -23,6 +23,12 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+app.Services.GetRequiredService<AuditLog>().SeedDemo();
+var budget = app.Services.GetRequiredService<BudgetBook>();
+budget.TryConsume("sales-desk", 38, out _);
+budget.TryConsume("support", 91, out _);
+budget.TryConsume("team-a", 54, out _);
+budget.TryConsume("hr-bot", 22, out _);
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>
