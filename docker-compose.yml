@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  spectator:
+    build:
+      context: .
+      dockerfile: src/Spectator/Spectator.Api/Dockerfile
+    ports:
+      - "5185:5185"
+      - "5186:5186"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5185
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5185/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - impo-network
+
+  localcrm-api:
+    build:
+      context: .
+      dockerfile: src/LocalCrm/LocalCrm.Api/Dockerfile
+    ports:
+      - "5057:5057"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5057
+    volumes:
+      - localcrm-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5057/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - impo-network
+
+  localcrm-app:
+    build:
+      context: .
+      dockerfile: src/LocalCrm/LocalCrm.App/Dockerfile
+    ports:
+      - "5209:5209"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5209
+      - API_BASE_URL=http://localcrm-api:5057
+    depends_on:
+      - localcrm-api
+    networks:
+      - impo-network
+
+  promptgateway:
+    build:
+      context: .
+      dockerfile: src/PromptGateway/PromptGateway.Api/Dockerfile
+    ports:
+      - "5047:5047"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5047
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5047/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - impo-network
+
+volumes:
+  localcrm-data:
+    driver: local
+
+networks:
+  impo-network:
+    driver: bridge
