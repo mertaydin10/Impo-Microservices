@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
 
-Console.WriteLine("Impo örnek veri yükleyici\n");
+Console.WriteLine("Impo toplu veri yükleyici\n");
 
 var candidates = new Dictionary<string, string>
 {
@@ -34,46 +34,125 @@ foreach (var (name, url) in candidates)
 
 if (urls.ContainsKey("LocalCrm"))
 {
-    var device = "seeder";
+    const int contactCount = 250;
+    const string device = "bulk-seeder";
     var now = DateTimeOffset.UtcNow;
-    var contacts = new[]
+    var firstNames = new[]
     {
-        Make(Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111"), "Ayşe Güneş", "ayse.gunes@delta.example", "05321112233", "Delta Enerji", "Saha tableti siparişi", device, now),
-        Make(Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222"), "Burak Çelik", "burak.celik@orman.example", "05446667788", "Orman Mobilya", "ERP .NET geçişi", device, now.AddDays(-3)),
-        Make(Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333"), "Deniz Koç", "deniz.koc@liman.example", "05359876543", "Kuzey Liman", "gRPC skor yayını", device, now.AddDays(-1))
+        "Ayşe", "Burak", "Ceren", "Deniz", "Ece", "Emre", "Gökçe", "Hakan", "İrem", "Kerem",
+        "Leyla", "Mert", "Nehir", "Okan", "Pelin", "Selin", "Tolga", "Yasemin", "Can", "Zeynep"
     };
+    var lastNames = new[]
+    {
+        "Acar", "Arslan", "Aydın", "Çelik", "Demir", "Doğan", "Güneş", "Kaya", "Kılıç", "Koç",
+        "Öztürk", "Şahin", "Tekin", "Yıldırım", "Yılmaz"
+    };
+    var companies = new[]
+    {
+        "Atlas Teknoloji", "Delta Enerji", "Kuzey Lojistik", "Mavi Yazılım", "Nova Sağlık", "Orman Mobilya",
+        "Pusula Danışmanlık", "Rota Otomotiv", "Sahil Gıda", "Vadi İnşaat", "Yakamoz Medya", "Zirve Finans"
+    };
+    var topics = new[]
+    {
+        "Yeni müşteri görüşmesi", "Teklif bekliyor", "Demo planlanacak", "Yıllık sözleşme yenileme",
+        "Teknik ekip dönüş yapacak", "Fiyatlandırma görüşmesi", "Pilot uygulama başladı", "Satış sonrası destek"
+    };
+    var contacts = Enumerable.Range(1, contactCount).Select(index =>
+    {
+        var firstName = firstNames[(index - 1) % firstNames.Length];
+        var lastName = lastNames[((index - 1) / firstNames.Length) % lastNames.Length];
+        var emailName = $"{Normalize(firstName)}.{Normalize(lastName)}{index}";
+        var timestamp = now.AddMinutes(-index * 37);
+        return Make(
+            Guid.Parse($"10000000-0000-0000-0000-{index:000000000000}"),
+            $"{firstName} {lastName}",
+            $"{emailName}@example.com",
+            $"05{30 + index % 20:00}{1000000 + index:0000000}",
+            companies[index % companies.Length],
+            topics[index % topics.Length],
+            device,
+            timestamp);
+    }).ToArray();
 
-    var res = await client.PostAsJsonAsync($"{urls["LocalCrm"]}/sync", new { contacts });
-    Console.WriteLine(res.IsSuccessStatusCode ? $"  CRM: {contacts.Length} kişi gönderildi" : $"  CRM hata: {await res.Content.ReadAsStringAsync()}");
+    var successfulContacts = 0;
+    foreach (var batch in contacts.Chunk(50))
+    {
+        var response = await client.PostAsJsonAsync($"{urls["LocalCrm"]}/sync", new { contacts = batch });
+        if (response.IsSuccessStatusCode)
+        {
+            successfulContacts += batch.Length;
+        }
+        else
+        {
+            Console.WriteLine($"  CRM hata: {await response.Content.ReadAsStringAsync()}");
+        }
+    }
+    Console.WriteLine($"  CRM: {successfulContacts} kişi gönderildi");
 }
 
 if (urls.ContainsKey("Spectator"))
 {
-    const string matchId = "seeded-cup";
-    var events = new (string Type, int Offset, string Json)[]
+    const int matchCount = 20;
+    var teams = new[]
     {
-        ("kickoff", 0, """{"note":"Kupa finali"}"""),
-        ("goal", 600, """{"side":"home","player":"A. Yıldız"}"""),
-        ("goal", 2100, """{"side":"away","player":"B. Kılıç"}"""),
-        ("goal", 3300, """{"side":"home","player":"C. Acar"}""")
+        "Adana", "Ankara", "Antalya", "Bursa", "Denizli", "Eskişehir", "Gaziantep", "İstanbul",
+        "İzmir", "Kayseri", "Konya", "Mersin", "Samsun", "Sivas", "Trabzon", "Rize",
+        "Sakarya", "Kocaeli", "Manisa", "Malatya", "Hatay", "Ordu", "Boluspor", "Göztepe"
     };
-
-    await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"{urls["Spectator"]}/api/matches/{matchId}"));
-    foreach (var e in events)
+    var playerNames = new[]
     {
-        await client.PostAsJsonAsync($"{urls["Spectator"]}/api/matches/{matchId}/events",
-            new { type = e.Type, offsetSeconds = e.Offset, payloadJson = e.Json });
+        "A. Yıldız", "B. Kılıç", "C. Acar", "D. Kaya", "E. Şahin", "F. Demir",
+        "G. Arslan", "H. Koç", "K. Tekin", "M. Öztürk", "O. Güneş", "S. Yılmaz"
+    };
+    var random = new Random(42);
+    var totalEvents = 0;
+
+    for (var matchIndex = 1; matchIndex <= matchCount; matchIndex++)
+    {
+        var matchId = $"lig-{matchIndex:00}";
+        var homeTeam = teams[(matchIndex - 1) % teams.Length];
+        var awayTeam = teams[(matchIndex + 7) % teams.Length];
+        await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, $"{urls["Spectator"]}/api/matches/{matchId}"));
+        await client.PostAsJsonAsync($"{urls["Spectator"]}/api/matches", new { matchId, homeTeam, awayTeam });
+        await AddEvent(client, urls["Spectator"], matchId, "kickoff", 0, null, null, "Lig karşılaşması başladı");
+        totalEvents++;
+
+        var minute = 4;
+        var eventCount = random.Next(14, 25);
+        for (var eventIndex = 0; eventIndex < eventCount; eventIndex++)
+        {
+            minute = Math.Min(89, minute + random.Next(2, 7));
+            var roll = random.Next(100);
+            var type = roll < 32 ? "goal" : roll < 67 ? "card" : "sub";
+            var side = random.Next(2) == 0 ? "home" : "away";
+            var player = playerNames[random.Next(playerNames.Length)];
+            var playerIn = type == "sub" ? playerNames[random.Next(playerNames.Length)] : null;
+            var playerOut = type == "sub" ? player : null;
+            await AddEvent(client, urls["Spectator"], matchId, type, minute, side,
+                type == "sub" ? null : player, null, playerIn, playerOut);
+            totalEvents++;
+        }
+
+        await AddEvent(client, urls["Spectator"], matchId, "fulltime", 90, null, null, "Karşılaşma sona erdi");
+        totalEvents++;
     }
 
-    Console.WriteLine("  Spectator: seeded-cup maçı yazıldı");
+    Console.WriteLine($"  Spectator: {matchCount} maç ve {totalEvents} olay yazıldı");
 }
 
 if (urls.ContainsKey("PromptGateway"))
 {
-    await client.PostAsJsonAsync(
-        $"{urls["PromptGateway"]}/v1/chat/completions",
-        new { model = "gpt-4o-mini", messages = new[] { new { role = "user", content = "Sipariş durumu nedir?" } } });
-    Console.WriteLine("  Gateway: örnek istek atıldı");
+    for (var index = 1; index <= 20; index++)
+    {
+        await client.PostAsJsonAsync(
+            $"{urls["PromptGateway"]}/v1/chat/completions",
+            new
+            {
+                model = index % 3 == 0 ? "quality" : "fast",
+                messages = new[] { new { role = "user", content = $"{index:000} numaralı siparişin durumu nedir?" } }
+            });
+    }
+    Console.WriteLine("  Gateway: 20 örnek istek atıldı");
 }
 
 Console.WriteLine("\nBitti. CRM http://localhost:5209  |  Maç http://localhost:5185");
@@ -89,3 +168,27 @@ static object Make(Guid id, string name, string email, string phone, string comp
 };
 
 static object F(string value, DateTimeOffset at, string device) => new { value, updatedAt = at, deviceId = device };
+
+static string Normalize(string value) => value
+    .ToLowerInvariant()
+    .Replace("ç", "c")
+    .Replace("ğ", "g")
+    .Replace("ı", "i")
+    .Replace("ö", "o")
+    .Replace("ş", "s")
+    .Replace("ü", "u");
+
+static Task AddEvent(
+    HttpClient client,
+    string baseUrl,
+    string matchId,
+    string type,
+    int minute,
+    string? side,
+    string? player,
+    string? note = null,
+    string? playerIn = null,
+    string? playerOut = null) =>
+    client.PostAsJsonAsync(
+        $"{baseUrl}/api/matches/{matchId}/events",
+        new { type, minute, side, player, note, playerIn, playerOut });

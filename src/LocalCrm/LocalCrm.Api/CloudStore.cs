@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS contacts (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );");
+        EnsureColumn(db, "created_at");
+        EnsureColumn(db, "updated_at");
     }
 
     public IReadOnlyList<ContactRecord> All()
@@ -103,6 +105,25 @@ CREATE TABLE IF NOT EXISTS contacts (
         var db = new SqliteConnection(_cs);
         db.Open();
         return db;
+    }
+
+    private static void EnsureColumn(SqliteConnection db, string columnName)
+    {
+        using var info = db.CreateCommand();
+        info.CommandText = "PRAGMA table_info(contacts)";
+        using var reader = info.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+        reader.Close();
+
+        using var alter = db.CreateCommand();
+        alter.CommandText = $"ALTER TABLE contacts ADD COLUMN {columnName} TEXT NOT NULL DEFAULT ''";
+        alter.ExecuteNonQuery();
     }
 }
 
