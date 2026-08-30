@@ -9,6 +9,8 @@ public sealed record MatchEvent(
 
 public sealed record MatchSnapshot(
     string MatchId,
+    string HomeTeam,
+    string AwayTeam,
     int Home,
     int Away,
     int ClockSeconds,

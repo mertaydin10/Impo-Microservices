@@ -6,6 +6,10 @@ namespace Spectator.Api;
 public sealed class EventStore
 {
     private readonly ConcurrentDictionary<string, List<MatchEvent>> _streams = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, (string Home, string Away)> _teams = new(StringComparer.OrdinalIgnoreCase);
+
+    public void SetTeams(string matchId, string home, string away) =>
+        _teams[matchId] = (home, away);
 
     public MatchEvent Append(string matchId, string type, string payloadJson, int offsetSeconds)
     {
@@ -37,6 +41,13 @@ public sealed class EventStore
         var events = Stream(matchId).Where(e => e.OffsetSeconds <= atSeconds).OrderBy(e => e.OffsetSeconds).ToList();
         var home = 0;
         var away = 0;
+        var homeName = "HOME";
+        var awayName = "AWAY";
+        if (_teams.TryGetValue(matchId, out var teams))
+        {
+            homeName = teams.Home;
+            awayName = teams.Away;
+        }
 
         foreach (var e in events)
         {
@@ -57,12 +68,16 @@ public sealed class EventStore
             }
         }
 
-        return new MatchSnapshot(matchId, home, away, atSeconds, events);
+        return new MatchSnapshot(matchId, homeName, awayName, home, away, atSeconds, events);
     }
 
-    public IReadOnlyList<string> GetAllMatches() => _streams.Keys.ToList();
+    public IReadOnlyList<string> GetAllMatches() => _streams.Keys.Concat(_teams.Keys).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-    public void Clear(string matchId) => _streams.TryRemove(matchId, out _);
+    public void Clear(string matchId)
+    {
+        _streams.TryRemove(matchId, out _);
+        _teams.TryRemove(matchId, out _);
+    }
 
     public int TotalEventsCount => _streams.Values.Sum(list =>
     {

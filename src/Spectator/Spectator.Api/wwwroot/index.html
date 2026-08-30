@@ -57,17 +57,18 @@
   
   <div class="panel">
     <div class="score">
-      <div>HOME <small id="home">0</small></div>
+      <div><span id="homeLabel">HOME</span> <small id="home">0</small></div>
       <div>–</div>
-      <div>AWAY <small id="away">0</small></div>
+      <div><span id="awayLabel">AWAY</span> <small id="away">0</small></div>
     </div>
-    <p>Saat: <strong id="clock">0</strong>s · maç <code id="matchName">demo</code></p>
+    <p>Dakika: <strong id="clock">0</strong>s · maç <code id="matchName">gs-fb</code></p>
   </div>
   
   <div class="panel">
     <h3 style="margin-top: 0;">Kontrol paneli</h3>
     <div class="row">
-      <input id="matchId" type="text" placeholder="Maç ID" value="demo" style="width:10rem" />
+      <input id="matchId" type="text" placeholder="Maç ID" value="gs-fb" style="width:10rem" />
+      <select id="matchPick" style="min-width:14rem"></select>
       <button class="ghost" id="switchMatch">Maçı değiştir</button>
       <button class="danger" id="clearMatch">Temizle</button>
     </div>
@@ -114,7 +115,7 @@
   </div>
 </main>
 <script>
-  let currentMatchId = "demo";
+  let currentMatchId = "gs-fb";
   const log = document.getElementById("log");
   const conn = new signalR.HubConnectionBuilder().withUrl("/hub/match").withAutomaticReconnect().build();
   let eventCount = 0;
@@ -129,6 +130,18 @@
     document.getElementById("home").textContent = s.home;
     document.getElementById("away").textContent = s.away;
     document.getElementById("clock").textContent = s.clockSeconds;
+    if (s.homeTeam) document.getElementById("homeLabel").textContent = s.homeTeam;
+    if (s.awayTeam) document.getElementById("awayLabel").textContent = s.awayTeam;
+  }
+
+  function addLog(e) {
+    const li = document.createElement("li");
+    const badge = document.createElement("span");
+    badge.className = `badge ${e.type}`;
+    badge.textContent = e.type.toUpperCase();
+    li.appendChild(badge);
+    li.appendChild(document.createTextNode(`${Math.floor(e.offsetSeconds / 60)}'  ${e.payloadJson}`));
+    log.prepend(li);
   }
 
   conn.on("snapshot", renderSnap);
@@ -136,19 +149,12 @@
     eventCount++;
     document.getElementById("statEvents").textContent = eventCount;
     document.getElementById("statLastEvent").textContent = e.type;
-    
-    const li = document.createElement("li");
-    const badge = document.createElement("span");
-    badge.className = `badge ${e.type}`;
-    badge.textContent = e.type.toUpperCase();
-    li.appendChild(badge);
-    li.appendChild(document.createTextNode(`${e.offsetSeconds}s  ${e.payloadJson}`));
-    log.prepend(li);
+    addLog(e);
   });
 
   conn.onreconnecting(() => updateStatus("Yeniden bağlanıyor...", ""));
   conn.onreconnected(() => {
-    updateStatus("🔴 CANLI", "live");
+    updateStatus("CANLI", "live");
     join().catch(() => {});
   });
   conn.onclose(() => updateStatus("Bağlantı kesildi", ""));
@@ -156,24 +162,57 @@
   async function join() {
     if (conn.state !== "Connected") {
       await conn.start();
-      updateStatus("🔴 CANLI", "live");
+      updateStatus("CANLI", "live");
     }
     await conn.invoke("JoinMatch", currentMatchId);
   }
-  join().catch(() => {});
+
+  async function loadBoard() {
+    log.innerHTML = "";
+    const events = await (await fetch(`/api/matches/${currentMatchId}/events`)).json();
+    eventCount = events.length;
+    document.getElementById("statEvents").textContent = eventCount;
+    document.getElementById("matchName").textContent = currentMatchId;
+    document.getElementById("matchId").value = currentMatchId;
+    events.forEach(addLog);
+    const last = events.reduce((m, e) => Math.max(m, e.offsetSeconds || 0), 0);
+    document.getElementById("scrub").max = Math.max(5400, last);
+    document.getElementById("scrub").value = last;
+    document.getElementById("scrubVal").textContent = last;
+    document.getElementById("offset").value = last + 30;
+    const snap = await (await fetch(`/api/matches/${currentMatchId}/replay?at=${last}`)).json();
+    renderSnap(snap);
+  }
+
+  async function refreshMatchList() {
+    const list = await (await fetch("/api/matches")).json();
+    const pick = document.getElementById("matchPick");
+    pick.innerHTML = list.map(m =>
+      `<option value="${m.id}">${m.homeTeam} ${m.home}–${m.away} ${m.awayTeam} (${m.events} olay)</option>`
+    ).join("");
+    pick.value = currentMatchId;
+  }
+
+  document.getElementById("matchPick").onchange = async () => {
+    currentMatchId = document.getElementById("matchPick").value;
+    await join();
+    await loadBoard();
+  };
+
+  join().then(async () => {
+    await refreshMatchList();
+    await loadBoard();
+  }).catch(() => {});
 
   document.getElementById("switchMatch").onclick = async () => {
-    currentMatchId = document.getElementById("matchId").value || "demo";
+    currentMatchId = document.getElementById("matchId").value || "gs-fb";
     document.getElementById("matchName").textContent = currentMatchId;
     log.innerHTML = "";
     eventCount = 0;
     document.getElementById("statEvents").textContent = "0";
     await join();
-    
-    const res = await fetch(`/api/matches/${currentMatchId}/events`);
-    const events = await res.json();
-    eventCount = events.length;
-    document.getElementById("statEvents").textContent = eventCount;
+    await loadBoard();
+    await refreshMatchList();
   };
 
   document.getElementById("clearMatch").onclick = async () => {

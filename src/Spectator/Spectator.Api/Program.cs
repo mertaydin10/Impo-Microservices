@@ -28,6 +28,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+MatchDemoSeed.Apply(app.Services.GetRequiredService<EventStore>(), app.Services.GetRequiredService<MetricsCollector>());
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -74,7 +75,23 @@ app.MapGet("/api/matches/{matchId}/events", (string matchId, EventStore store) =
 .WithTags("Matches");
 
 app.MapGet("/api/matches", (EventStore store) =>
-    Results.Ok(store.GetAllMatches()))
+{
+    var list = store.GetAllMatches().Select(id =>
+    {
+        var last = store.Stream(id).Select(e => e.OffsetSeconds).DefaultIfEmpty(0).Max();
+        var snap = store.Replay(id, last);
+        return new
+        {
+            id,
+            homeTeam = snap.HomeTeam,
+            awayTeam = snap.AwayTeam,
+            home = snap.Home,
+            away = snap.Away,
+            events = snap.AppliedEvents.Count
+        };
+    });
+    return Results.Ok(list);
+})
 .WithName("GetAllMatches")
 .WithTags("Matches");
 
