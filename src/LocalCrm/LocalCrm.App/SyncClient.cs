@@ -27,9 +27,11 @@ public sealed class SyncClient(HttpClient http, LocalStore store)
         var pushed = await http.PostAsJsonAsync("/sync", new { contacts = merged }, ct);
         pushed.EnsureSuccessStatusCode();
         var roundtrip = await pushed.Content.ReadFromJsonAsync<SyncEnvelope>(ct);
-        store.ReplaceAll(roundtrip?.Contacts ?? merged);
-        return $"{merged.Count} kayıt senkron (alan bazlı birleştirme).";
+        var saved = roundtrip?.Contacts ?? merged;
+        store.ReplaceAll(saved);
+        var extra = roundtrip?.Errors is { Count: > 0 } ? $" Uyarı: {string.Join("; ", roundtrip.Errors)}" : "";
+        return $"{saved.Count} kayıt senkron (alan bazlı birleştirme).{extra}";
     }
 
-    private sealed record SyncEnvelope(List<ContactRecord> Contacts);
+    private sealed record SyncEnvelope(List<ContactRecord> Contacts, List<string>? Errors);
 }

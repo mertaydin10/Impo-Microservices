@@ -68,6 +68,19 @@ public sealed class LocalStore
         cmd.ExecuteNonQuery();
     }
 
+    public void SeedIfEmpty()
+    {
+        if (All().Count > 0)
+        {
+            return;
+        }
+
+        foreach (var c in CrmDemoContacts.Create(DeviceId))
+        {
+            Save(c);
+        }
+    }
+
     public void ReplaceAll(IEnumerable<ContactRecord> contacts)
     {
         using var db = Open();

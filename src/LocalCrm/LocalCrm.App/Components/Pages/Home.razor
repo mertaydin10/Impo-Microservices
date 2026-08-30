@@ -12,6 +12,7 @@
 <p class="muted">1) Yeni kişi → 2) alanları doldur, Kaydet → 3) CRM API (<code>localhost:5057</code>) açıkken Bulut ile senkron.</p>
 
 <div class="bar">
+    <input placeholder="Kişilerde ara…" @bind="_q" @bind:event="oninput" style="max-width:220px" />
     <button @onclick="SaveNew">Yeni kişi</button>
     <button class="ghost" @onclick="SyncNow">Bulut ile senkron</button>
     <span>@_status</span>
@@ -20,10 +21,11 @@
 <div class="grid">
     <section>
         <h3>Kişiler</h3>
-        @foreach (var c in _list)
+        @foreach (var c in Visible)
         {
             <button class="card @(c.Id == _selected?.Id ? "on" : null)" @onclick="() => Select(c)">
                 <strong>@(string.IsNullOrWhiteSpace(c.Name.Value) ? "(isimsiz)" : c.Name.Value)</strong>
+                <span>@c.Company.Value</span>
                 <span>@c.Email.Value</span>
             </button>
         }
@@ -46,7 +48,14 @@
 @code {
     List<ContactRecord> _list = [];
     ContactRecord? _selected;
-    string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "";
+    string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "", _q = "";
+
+    IEnumerable<ContactRecord> Visible =>
+        string.IsNullOrWhiteSpace(_q)
+            ? _list
+            : _list.Where(c =>
+                (c.Name.Value + c.Email.Value + c.Company.Value + c.Phone.Value)
+                    .Contains(_q, StringComparison.OrdinalIgnoreCase));
 
     protected override void OnInitialized() => _list = Store.All().ToList();
 

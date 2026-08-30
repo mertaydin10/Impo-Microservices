@@ -18,6 +18,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+app.Services.GetRequiredService<CloudStore>().SeedIfEmpty();
 app.UseCors();
 
 app.UseSwagger();

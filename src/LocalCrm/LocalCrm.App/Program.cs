@@ -11,7 +11,9 @@ builder.Services.AddSingleton(sp =>
     var env = sp.GetRequiredService<IWebHostEnvironment>();
     var dir = Path.Combine(env.ContentRootPath, "App_Data");
     Directory.CreateDirectory(dir);
-    return new LocalStore(Path.Combine(dir, "local.db"));
+    var store = new LocalStore(Path.Combine(dir, "local.db"));
+    store.SeedIfEmpty();
+    return store;
 });
 
 builder.Services.AddHttpClient<SyncClient>(client =>

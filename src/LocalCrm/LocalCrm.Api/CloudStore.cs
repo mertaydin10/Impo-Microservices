@@ -72,6 +72,19 @@ CREATE TABLE IF NOT EXISTS contacts (
         return cmd.ExecuteNonQuery() > 0;
     }
 
+    public void SeedIfEmpty()
+    {
+        if (All().Count > 0)
+        {
+            return;
+        }
+
+        foreach (var c in CrmDemoContacts.Create("cloud-seed"))
+        {
+            Upsert(c);
+        }
+    }
+
     public StoreStats GetStats()
     {
         using var db = Open();
