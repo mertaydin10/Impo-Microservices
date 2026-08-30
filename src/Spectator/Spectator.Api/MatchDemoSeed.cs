@@ -28,6 +28,7 @@ public static class MatchDemoSeed
         Push(store, metrics, id, "goal", 67 * 60, """{"side":"home","player":"Yunus Akgün","minute":67}""");
         Push(store, metrics, id, "card", 78 * 60, """{"side":"home","player":"Torreira","color":"yellow"}""");
         Push(store, metrics, id, "goal", 89 * 60, """{"side":"away","player":"Talisca","minute":89}""");
+        Push(store, metrics, id, "fulltime", 90 * 60, """{"note":"Derbi sona erdi"}""");
     }
 
     private static void SeedEurope(EventStore store, MetricsCollector metrics)
@@ -38,6 +39,7 @@ public static class MatchDemoSeed
         Push(store, metrics, id, "goal", 9 * 60, """{"side":"away","player":"Lautaro","minute":9}""");
         Push(store, metrics, id, "goal", 55 * 60, """{"side":"away","player":"Thuram","minute":55}""");
         Push(store, metrics, id, "sub", 70 * 60, """{"side":"home","playerOut":"Berghuis","playerIn":"Godts"}""");
+        Push(store, metrics, id, "fulltime", 90 * 60, """{"note":"Karşılaşma sona erdi"}""");
     }
 
     private static void SeedFriendly(EventStore store, MetricsCollector metrics)
@@ -48,6 +50,7 @@ public static class MatchDemoSeed
         Push(store, metrics, id, "goal", 18 * 60, """{"side":"home","player":"Yılmaz","minute":18}""");
         Push(store, metrics, id, "goal", 51 * 60, """{"side":"home","player":"Şahin","minute":51}""");
         Push(store, metrics, id, "card", 63 * 60, """{"side":"away","player":"Kaya","color":"yellow"}""");
+        Push(store, metrics, id, "fulltime", 90 * 60, """{"note":"Hazırlık maçı sona erdi"}""");
     }
 
     private static void Push(EventStore store, MetricsCollector metrics, string matchId, string type, int offset, string json)

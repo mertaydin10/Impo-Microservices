@@ -17,9 +17,18 @@ public sealed class MatchIngestService : MatchIngest.MatchIngestBase
 
     public override async Task<Ack> Push(MatchEventMsg request, ServerCallContext context)
     {
-        var evt = _store.Append(request.MatchId, request.Type, request.PayloadJson, request.OffsetSeconds);
+        MatchEvent evt;
+        try
+        {
+            evt = _store.Append(request.MatchId, request.Type, request.PayloadJson, request.OffsetSeconds);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, exception.Message));
+        }
+
         var snap = _store.Replay(request.MatchId, request.OffsetSeconds);
-        await _hub.Clients.Group(request.MatchId).SendAsync("event", evt, context.CancellationToken);
+        await _hub.Clients.Group(request.MatchId).SendAsync("event", MatchEventView.From(evt), context.CancellationToken);
         await _hub.Clients.Group(request.MatchId).SendAsync("snapshot", snap, context.CancellationToken);
         return new Ack { Ok = true };
     }

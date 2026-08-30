@@ -7,9 +7,24 @@ public sealed class EventStore
 {
     private readonly ConcurrentDictionary<string, List<MatchEvent>> _streams = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, (string Home, string Away)> _teams = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _persistenceGate = new();
+    private readonly string? _storagePath;
 
-    public void SetTeams(string matchId, string home, string away) =>
+    public EventStore()
+    {
+    }
+
+    public EventStore(string storagePath)
+    {
+        _storagePath = storagePath;
+        Load();
+    }
+
+    public void SetTeams(string matchId, string home, string away)
+    {
         _teams[matchId] = (home, away);
+        Persist();
+    }
 
     public MatchEvent Append(string matchId, string type, string payloadJson, int offsetSeconds)
     {
@@ -17,10 +32,32 @@ public sealed class EventStore
         var list = _streams.GetOrAdd(matchId, _ => []);
         lock (list)
         {
+            if (list.Any(item => string.Equals(item.Type, "fulltime", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException("Biten maça yeni olay eklenemez.");
+            }
+
             list.Add(evt);
         }
 
+        Persist();
         return evt;
+    }
+
+    public bool Exists(string matchId) =>
+        _streams.ContainsKey(matchId) || _teams.ContainsKey(matchId);
+
+    public bool IsFinished(string matchId)
+    {
+        if (!_streams.TryGetValue(matchId, out var list))
+        {
+            return false;
+        }
+
+        lock (list)
+        {
+            return list.Any(item => string.Equals(item.Type, "fulltime", StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     public IReadOnlyList<MatchEvent> Stream(string matchId)
@@ -77,10 +114,68 @@ public sealed class EventStore
     {
         _streams.TryRemove(matchId, out _);
         _teams.TryRemove(matchId, out _);
+        Persist();
     }
 
     public int TotalEventsCount => _streams.Values.Sum(list =>
     {
         lock (list) return list.Count;
     });
+
+    private void Load()
+    {
+        if (_storagePath is null || !File.Exists(_storagePath))
+        {
+            return;
+        }
+
+        try
+        {
+            var matches = JsonSerializer.Deserialize<List<StoredMatch>>(File.ReadAllText(_storagePath)) ?? [];
+            foreach (var match in matches)
+            {
+                _teams[match.Id] = (match.HomeTeam, match.AwayTeam);
+                _streams[match.Id] = match.Events;
+            }
+        }
+        catch (JsonException)
+        {
+            // Bozuk dosya uygulamanın açılmasını engellemez; yeni kayıtla yeniden oluşturulur.
+        }
+    }
+
+    private void Persist()
+    {
+        if (_storagePath is null)
+        {
+            return;
+        }
+
+        lock (_persistenceGate)
+        {
+            var ids = GetAllMatches();
+            var matches = ids.Select(id =>
+            {
+                var teams = _teams.TryGetValue(id, out var names) ? names : ("HOME", "AWAY");
+                var events = Stream(id).ToList();
+                return new StoredMatch(id, teams.Item1, teams.Item2, events);
+            }).ToList();
+
+            var directory = Path.GetDirectoryName(_storagePath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var temporaryPath = $"{_storagePath}.tmp";
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(matches));
+            File.Move(temporaryPath, _storagePath, true);
+        }
+    }
+
+    private sealed record StoredMatch(
+        string Id,
+        string HomeTeam,
+        string AwayTeam,
+        List<MatchEvent> Events);
 }

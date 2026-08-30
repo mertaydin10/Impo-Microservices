@@ -11,7 +11,8 @@ builder.WebHost.ConfigureKestrel(options =>
     options.ListenLocalhost(5186, lo => lo.Protocols = HttpProtocols.Http2);
 });
 
-builder.Services.AddSingleton<EventStore>();
+builder.Services.AddSingleton(new EventStore(
+    Path.Combine(builder.Environment.ContentRootPath, "data", "matches.json")));
 builder.Services.AddSingleton<MetricsCollector>();
 builder.Services.AddSignalR();
 builder.Services.AddGrpc();
@@ -53,6 +54,11 @@ app.MapPost("/api/matches/{matchId}/events", async (
     MetricsCollector metrics,
     IHubContext<MatchHub> hub) =>
 {
+    if (store.IsFinished(matchId))
+    {
+        return Results.Conflict(new { message = "Bu maç bitmiş ve arşivlenmiştir. Yeni olay eklenemez." });
+    }
+
     var allowedTypes = new[] { "kickoff", "goal", "card", "sub", "halftime", "fulltime" };
     var type = dto.Type.Trim().ToLowerInvariant();
     if (!allowedTypes.Contains(type))
@@ -96,10 +102,16 @@ app.MapPost("/api/matches", (CreateMatchDto dto, EventStore store) =>
         return Results.BadRequest(new { message = "Maç kodu ve takım adları zorunludur." });
     }
 
-    store.SetTeams(dto.MatchId.Trim(), dto.HomeTeam.Trim(), dto.AwayTeam.Trim());
+    var matchId = dto.MatchId.Trim();
+    if (store.Exists(matchId))
+    {
+        return Results.Conflict(new { message = "Bu maç kodu daha önce kullanılmış. Yeni bir maç kodu girin." });
+    }
+
+    store.SetTeams(matchId, dto.HomeTeam.Trim(), dto.AwayTeam.Trim());
     return Results.Created($"/api/matches/{dto.MatchId}", new
     {
-        id = dto.MatchId.Trim(),
+        id = matchId,
         homeTeam = dto.HomeTeam.Trim(),
         awayTeam = dto.AwayTeam.Trim()
     });
@@ -130,7 +142,8 @@ app.MapGet("/api/matches", (EventStore store) =>
             awayTeam = snap.AwayTeam,
             home = snap.Home,
             away = snap.Away,
-            events = snap.AppliedEvents.Count
+            events = snap.AppliedEvents.Count,
+            isFinished = store.IsFinished(id)
         };
     });
     return Results.Ok(list);
