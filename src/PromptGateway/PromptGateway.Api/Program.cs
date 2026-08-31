@@ -8,6 +8,7 @@ builder.Services.AddSingleton<BudgetBook>();
 builder.Services.AddSingleton<AuditLog>();
 builder.Services.AddSingleton<ModelRouter>();
 builder.Services.AddHealthChecks();
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin()));
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 
@@ -29,6 +30,7 @@ budget.TryConsume("sales-desk", 38, out _);
 budget.TryConsume("support", 91, out _);
 budget.TryConsume("team-a", 54, out _);
 budget.TryConsume("hr-bot", 22, out _);
+app.UseCors();
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>

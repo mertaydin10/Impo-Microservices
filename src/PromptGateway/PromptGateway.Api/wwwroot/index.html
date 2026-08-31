@@ -3,60 +3,233 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Prompt / Policy Gateway</title>
+  <title>PromptGateway | Şirket kapısı</title>
   <style>
-    body { font-family: ui-sans-serif, system-ui; margin: 0; background: #111; color: #eee; }
-    main { max-width: 800px; margin: 0 auto; padding: 24px; }
-    textarea, input { width: 100%; font: inherit; background: #1c1c1c; color: inherit; border: 1px solid #333; border-radius: 8px; padding: 10px; }
-    button { font: inherit; padding: 8px 14px; border: 0; border-radius: 8px; background: #22c55e; color: #052e16; cursor: pointer; }
-    pre { background: #1c1c1c; padding: 12px; border-radius: 8px; overflow: auto; white-space: pre-wrap; }
-    label { display: block; margin: 12px 0 4px; color: #aaa; }
-    .howto { background: #1a1a1a; border-left: 4px solid #22c55e; padding: 14px 16px; border-radius: 8px; line-height: 1.55; margin-bottom: 20px; }
-    .howto ol { margin: 8px 0 0; padding-left: 1.2rem; }
+    :root {
+      --bg: #f3f4f8;
+      --surface: #fff;
+      --text: #171923;
+      --muted: #5c6474;
+      --line: #dfe3ec;
+      --accent: #4f46e5;
+      --ok: #08783f;
+      --warn: #b54708;
+      --danger: #d92d20;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--text); background: var(--bg); }
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; }
+    .topbar {
+      height: 64px; padding: 0 28px; background: #1e1b4b; color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 750; font-size: 18px; }
+    .brand-mark { width: 32px; height: 32px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; }
+    .layout { max-width: 1180px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1.15fr .85fr; gap: 20px; align-items: start; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+    .card-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+    .card-title { margin: 0; font-size: 14px; font-weight: 750; }
+    .body { padding: 18px; }
+    label { display: block; margin-bottom: 6px; color: #4e5563; font-size: 12px; font-weight: 700; }
+    input, textarea, select {
+      width: 100%; padding: 10px 11px; border: 1px solid #ccd1db; border-radius: 9px; background: #fff; color: var(--text);
+    }
+    textarea { min-height: 120px; resize: vertical; }
+    .field { margin-bottom: 14px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .primary { width: 100%; padding: 11px; border: 0; border-radius: 9px; color: #fff; background: var(--accent); font-weight: 750; }
+    .primary:hover { background: #4338ca; }
+    .ghost { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 12px; font-weight: 700; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 0 0 16px; }
+    .pills { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+    .pill { padding: 4px 8px; border-radius: 99px; background: #eef2ff; color: #3730a3; font-size: 11px; font-weight: 750; }
+    .pill.warn { background: #fff4ce; color: #93370d; }
+    .answer { background: #f7f8fc; border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-height: 88px; white-space: pre-wrap; line-height: 1.55; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    .meta div { background: #f7f8fc; border-radius: 9px; padding: 10px 12px; }
+    .meta span { display: block; color: var(--muted); font-size: 11px; font-weight: 700; }
+    .meta strong { font-size: 14px; }
+    .message { display: none; margin-bottom: 12px; padding: 9px 10px; border-radius: 8px; font-size: 12px; }
+    .message.error { display: block; color: #912018; background: #fee9e7; }
+    .message.success { display: block; color: #075d33; background: #e4f3ea; }
+    .row { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; padding: 12px 0; border-bottom: 1px solid #edf0ed; font-size: 13px; }
+    .row:last-child { border-bottom: 0; }
+    .row time { color: var(--muted); font-size: 12px; }
+    .row .preview { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .budget { margin-bottom: 12px; }
+    .budget-top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+    .bar { height: 8px; background: #e8eaf2; border-radius: 99px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--accent); }
+    .bar.warn > i { background: var(--warn); }
+    .bar.danger > i { background: var(--danger); }
+    .empty { padding: 28px 8px; text-align: center; color: var(--muted); font-size: 13px; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; padding: 12px; } .two, .meta { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
-<main>
-  <h1>Şirket ChatGPT kapısı (demo)</h1>
-  <div class="howto">
-    <strong>Ne işe yarar?</strong> Çalışanlar ChatGPT’ye doğrudan gitmez. Bu sayfa aradaki güvenlik filtresidir: mail/telefon/kart metinden silinir, pahalı model ucuz/izinli modele çevrilir, her istek kayda geçer.
-    <ol>
-      <li>Aşağıdaki yeşil düğmeye bas. Alttaki kutuda sahte bir AI cevabı çıkar.</li>
-      <li>Cevabın içinde <code>company-strong</code> görürsün: sen <code>gpt-4o</code> yazdın, kapı modeli değiştirdi.</li>
-      <li>Prompt’taki e-posta ve kart, gerçek modele gitmeden <code>[email]</code> / <code>[card]</code> olur. <b>Audit</b> ile kaydı gör.</li>
-    </ol>
-    Bu ChatGPT’nin kendisi değil; kapının çalıştığını gösteren bir deneme ekranı.
-  </div>
-  <label>API key</label>
-  <input id="key" value="team-a" />
-  <label>İstenen model</label>
-  <input id="model" value="gpt-4o" />
-  <label>Prompt (e-posta / kart dene)</label>
-  <textarea id="prompt" rows="5">Müşteri Ali, e-posta ali@firma.com kart 4111 1111 1111 1111 ile aradı. Tel 05321234567.</textarea>
-  <p><button id="send">Gönder — kapıdan geçir</button></p>
-  <pre id="out"> </pre>
-  <p><button id="audit" style="background:#3b82f6;color:#fff">Audit</button>
-     <button id="budget" style="background:#6366f1;color:#fff">Bütçe</button></p>
-</main>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">P</span> PromptGateway</div>
+    <span style="opacity:.75;font-size:13px">PII maskeleme · model yönlendirme · bütçe</span>
+  </header>
+  <main class="layout">
+    <section class="card">
+      <div class="card-head"><h2 class="card-title">İstek gönder</h2></div>
+      <div class="body">
+        <p class="hint">Çalışanlar modele doğrudan gitmez. Bu kapı e-posta, kart ve telefonu maskeler, pahalı modeli izinli modele çevirir ve her isteği kayda alır.</p>
+        <div id="message" class="message"></div>
+        <div class="two">
+          <div class="field">
+            <label for="key">API anahtarı</label>
+            <input id="key" value="team-a">
+          </div>
+          <div class="field">
+            <label for="model">İstenen model</label>
+            <select id="model">
+              <option value="gpt-4o">gpt-4o</option>
+              <option value="claude-3">claude-3</option>
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="cheap">cheap</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="prompt">Prompt</label>
+          <textarea id="prompt">Müşteri Ali, e-posta ali@firma.com kart 4111 1111 1111 1111 ile aradı. Tel 05321234567.</textarea>
+        </div>
+        <div class="field">
+          <label>Algılanan hassas veri</label>
+          <div id="piiPills" class="pills"></div>
+        </div>
+        <button id="send" class="primary" type="button">Kapıdan geçir</button>
+        <div class="meta">
+          <div><span>İstenen model</span><strong id="requestedModel">gpt-4o</strong></div>
+          <div><span>Yönlenen model</span><strong id="routedModel">—</strong></div>
+        </div>
+        <div class="field" style="margin-top:14px">
+          <label>Kapı yanıtı</label>
+          <div id="answer" class="answer">Henüz istek gönderilmedi.</div>
+        </div>
+      </div>
+    </section>
+    <div>
+      <section class="card" style="margin-bottom:20px">
+        <div class="card-head">
+          <h2 class="card-title">Bütçe</h2>
+          <button id="refreshBudget" class="ghost" type="button">Yenile</button>
+        </div>
+        <div id="budgetList" class="body"></div>
+      </section>
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">Denetim kaydı</h2>
+          <button id="refreshAudit" class="ghost" type="button">Yenile</button>
+        </div>
+        <div id="auditList" class="body"></div>
+      </section>
+    </div>
+  </main>
 <script>
-  async function post() {
-    const res = await fetch("/v1/chat/completions", {
+  const byId = id => document.getElementById(id);
+  const piiRules = [
+    { label: "E-posta", re: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i },
+    { label: "Kart", re: /\b(?:\d[ -]*?){13,19}\b/ },
+    { label: "Telefon", re: /\b(?:\+90|0)?5\d{9}\b/ },
+    { label: "Parola / anahtar", re: /(password|pwd|secret|token|api[_-]?key)\s*[:=]/i }
+  ];
+
+  function showMessage(text, kind) {
+    byId("message").textContent = text;
+    byId("message").className = `message ${kind}`;
+    setTimeout(() => byId("message").className = "message", 2800);
+  }
+
+  function detectPii(text) {
+    return piiRules.filter(rule => rule.re.test(text)).map(rule => rule.label);
+  }
+
+  function renderPii() {
+    const found = detectPii(byId("prompt").value);
+    byId("piiPills").innerHTML = found.length
+      ? found.map(item => `<span class="pill warn">${item} maskelenecek</span>`).join("")
+      : '<span class="pill">Hassas veri yok</span>';
+  }
+
+  async function sendPrompt() {
+    byId("requestedModel").textContent = byId("model").value;
+    const response = await fetch("/v1/chat/completions", {
       method: "POST",
-      headers: { "content-type": "application/json", "X-Api-Key": document.getElementById("key").value },
+      headers: { "content-type": "application/json", "X-Api-Key": byId("key").value },
       body: JSON.stringify({
-        model: document.getElementById("model").value,
-        messages: [{ role: "user", content: document.getElementById("prompt").value }]
+        model: byId("model").value,
+        messages: [{ role: "user", content: byId("prompt").value }]
       })
     });
-    document.getElementById("out").textContent = await res.text();
+    const payload = await response.json();
+    if (!response.ok) {
+      byId("answer").textContent = payload.error === "budget_exceeded"
+        ? `Bütçe doldu. Kalan token: ${payload.remaining}`
+        : (payload.error || "İstek reddedildi.");
+      showMessage("İstek kapıdan geçemedi.", "error");
+      await loadBudget();
+      return;
+    }
+    byId("routedModel").textContent = payload.model || "—";
+    byId("answer").textContent = payload.choices?.[0]?.message?.content || "Yanıt alınamadı.";
+    showMessage("İstek maskelenip yönlendirildi.", "success");
+    await Promise.all([loadAudit(), loadBudget()]);
   }
-  document.getElementById("send").onclick = post;
-  document.getElementById("audit").onclick = async () => {
-    document.getElementById("out").textContent = JSON.stringify(await (await fetch("/admin/audit")).json(), null, 2);
-  };
-  document.getElementById("budget").onclick = async () => {
-    document.getElementById("out").textContent = JSON.stringify(await (await fetch("/admin/budget")).json(), null, 2);
-  };
+
+  function formatTime(value) {
+    const date = new Date(value);
+    return date.toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
+  }
+
+  async function loadAudit() {
+    const rows = await (await fetch("/admin/audit")).json();
+    if (!rows.length) {
+      byId("auditList").innerHTML = '<div class="empty">Henüz kayıt yok.</div>';
+      return;
+    }
+    byId("auditList").innerHTML = [...rows].reverse().slice(0, 12).map(row => `
+      <article class="row">
+        <time>${formatTime(row.at)}</time>
+        <div>
+          <strong>${row.key}</strong> · ${row.model}
+          <div class="preview">${row.preview || ""}</div>
+        </div>
+        <span>${row.tokens} tok</span>
+      </article>`).join("");
+  }
+
+  async function loadBudget() {
+    const remaining = await (await fetch("/admin/budget")).json();
+    const limit = 8000;
+    const keys = Object.keys(remaining);
+    if (!keys.length) {
+      byId("budgetList").innerHTML = '<div class="empty">Henüz tüketim yok.</div>';
+      return;
+    }
+    byId("budgetList").innerHTML = keys.map(key => {
+      const left = remaining[key];
+      const used = Math.max(0, limit - left);
+      const pct = Math.min(100, Math.round((used / limit) * 100));
+      const tone = pct >= 90 ? "danger" : pct >= 70 ? "warn" : "";
+      return `<div class="budget">
+        <div class="budget-top"><strong>${key}</strong><span>${used} / ${limit}</span></div>
+        <div class="bar ${tone}"><i style="width:${pct}%"></i></div>
+      </div>`;
+    }).join("");
+  }
+
+  byId("prompt").oninput = renderPii;
+  byId("send").onclick = () => sendPrompt().catch(() => showMessage("Kapıya ulaşılamadı.", "error"));
+  byId("refreshAudit").onclick = loadAudit;
+  byId("refreshBudget").onclick = loadBudget;
+  renderPii();
+  loadAudit();
+  loadBudget();
 </script>
 </body>
 </html>

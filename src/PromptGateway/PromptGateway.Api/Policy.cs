@@ -119,6 +119,8 @@ public sealed class AuditLog
         Add(new AuditRow(DateTimeOffset.UtcNow.AddHours(-1), "team-a", "company-strong", 54, "/v1/chat/completions", "Kart bilgisi [CARD] gizlendi"));
         Add(new AuditRow(DateTimeOffset.UtcNow.AddMinutes(-20), "hr-bot", "company-fast", 22, "/v1/chat/completions", "Aday telefon [PHONE]"));
     }
+
+    public IReadOnlyList<AuditRow> Recent() => _rows.ToArray();
 }
 
 public sealed class ModelRouter
