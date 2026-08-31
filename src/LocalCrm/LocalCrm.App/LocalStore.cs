@@ -43,7 +43,7 @@ public sealed class LocalStore
         }
     }
 
-    public IReadOnlyList<ContactRecord> All()
+    public IReadOnlyList<ContactRecord> All(bool includeDeleted = false)
     {
         using var db = Open();
         using var cmd = db.CreateCommand();
@@ -55,7 +55,10 @@ public sealed class LocalStore
             list.Add(JsonSerializer.Deserialize<ContactRecord>(r.GetString(0), Json)!);
         }
 
-        return list.Where(c => c.DeletedAt == default).OrderBy(c => c.Name.Value).ToList();
+        return list
+            .Where(c => includeDeleted || c.DeletedAt == default)
+            .OrderBy(c => c.Name.Value)
+            .ToList();
     }
 
     public void Save(ContactRecord contact)

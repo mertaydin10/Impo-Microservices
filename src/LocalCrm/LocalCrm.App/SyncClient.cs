@@ -7,7 +7,7 @@ public sealed class SyncClient(HttpClient http, LocalStore store)
 {
     public async Task<string> SyncAsync(CancellationToken ct = default)
     {
-        var local = store.All().ToList();
+        var local = store.All(includeDeleted: true).ToList();
         var cloud = await http.GetFromJsonAsync<List<ContactRecord>>("/contacts", ct) ?? [];
 
         var byId = local.ToDictionary(c => c.Id);
@@ -27,8 +27,8 @@ public sealed class SyncClient(HttpClient http, LocalStore store)
         var pushed = await http.PostAsJsonAsync("/sync", new { contacts = merged }, ct);
         pushed.EnsureSuccessStatusCode();
         var roundtrip = await pushed.Content.ReadFromJsonAsync<SyncEnvelope>(ct);
-        var saved = roundtrip?.Contacts ?? merged;
-        store.ReplaceAll(saved);
+        var saved = (roundtrip?.Contacts ?? merged).Where(c => c.DeletedAt == default).ToList();
+        store.ReplaceAll(roundtrip?.Contacts ?? merged);
         var extra = roundtrip?.Errors is { Count: > 0 } ? $" Uyarı: {string.Join("; ", roundtrip.Errors)}" : "";
         return $"{saved.Count} kayıt senkron (alan bazlı birleştirme).{extra}";
     }

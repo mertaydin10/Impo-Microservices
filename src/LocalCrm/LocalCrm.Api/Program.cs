@@ -30,7 +30,7 @@ app.UseSwaggerUI(c =>
 
 app.MapHealthChecks("/health");
 
-app.MapGet("/contacts", (CloudStore store) => store.All())
+app.MapGet("/contacts", (CloudStore store) => store.All().Where(c => c.DeletedAt == default))
 .WithName("GetAllContacts")
 .WithTags("Contacts");
 

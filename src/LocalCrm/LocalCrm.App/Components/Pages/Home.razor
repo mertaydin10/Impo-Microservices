@@ -6,49 +6,87 @@
 
 <PageTitle>Yerel CRM</PageTitle>
 
-<h1>Rehber defteri (çevrimdışı CRM)</h1>
-<p>WhatsApp gibi: internet olmasa da kişi kaydedersin. “Bulut ile senkron” deyince telefonla bilgisayar aynı defteri birleştirir. Aynı kişide sen e-postayı, başka cihaz telefonu değiştirdiyse <strong>ikisi de kalır</strong> (biri diğerini ezmez).</p>
-<p class="muted">Bu cihazın adı: <code>@Store.DeviceId</code></p>
-<p class="muted">1) Yeni kişi → 2) alanları doldur, Kaydet → 3) CRM API (<code>localhost:5057</code>) açıkken Bulut ile senkron.</p>
-
-<div class="bar">
-    <input placeholder="Kişilerde ara…" @bind="_q" @bind:event="oninput" style="max-width:220px" />
-    <button @onclick="SaveNew">Yeni kişi</button>
-    <button class="ghost" @onclick="SyncNow">Bulut ile senkron</button>
-    <span>@_status</span>
+<div class="topbar">
+    <div class="brand"><span class="brand-mark">C</span> LocalCrm</div>
+    <div class="device">Bu cihaz: <code>@Store.DeviceId</code></div>
 </div>
 
-<div class="grid">
-    <section>
-        <h3>Kişiler</h3>
-        @foreach (var c in Visible)
-        {
-            <button class="card @(c.Id == _selected?.Id ? "on" : null)" @onclick="() => Select(c)">
-                <strong>@(string.IsNullOrWhiteSpace(c.Name.Value) ? "(isimsiz)" : c.Name.Value)</strong>
-                <span>@c.Company.Value</span>
-                <span>@c.Email.Value</span>
-            </button>
-        }
-    </section>
-    <section>
-        @if (_selected is not null)
-        {
-            <h3>Alanlar</h3>
-            <label>Ad <input @bind="_name" @bind:event="oninput" /></label>
-            <label>E-posta <input @bind="_email" @bind:event="oninput" /></label>
-            <label>Telefon <input @bind="_phone" @bind:event="oninput" /></label>
-            <label>Şirket <input @bind="_company" @bind:event="oninput" /></label>
-            <label>Not <textarea @bind="_notes" @bind:event="oninput"></textarea></label>
-            <p class="muted">Her alan kendi saat damgasını taşır. İki cihaz aynı kişiyi farklı alanlardan güncellerse ikisi de korunur.</p>
-            <button @onclick="Persist">Kaydet (yerel SQLite)</button>
-        }
-    </section>
+<div class="page">
+    @if (!string.IsNullOrWhiteSpace(_status))
+    {
+        <div class="banner @_statusKind">@_status</div>
+    }
+
+    <div class="toolbar">
+        <input placeholder="Kişilerde ara…" @bind="_q" @bind:event="oninput" />
+        <button type="button" @onclick="SaveNew">+ Yeni kişi</button>
+        <button type="button" class="ghost" @onclick="SyncNow">Bulut ile senkron</button>
+        <span class="count">@Visible.Count() kişi</span>
+    </div>
+
+    <div class="grid">
+        <section class="panel">
+            <header>
+                <h2>Rehber</h2>
+                <span>İnternet olmasa da kayıt tutulur</span>
+            </header>
+            <div class="list">
+                @if (!Visible.Any())
+                {
+                    <div class="empty">Eşleşen kişi yok. Yeni kişi ekleyin veya aramayı temizleyin.</div>
+                }
+                @foreach (var c in Visible)
+                {
+                    <button type="button" class="card @(c.Id == _selected?.Id ? "on" : null)" @onclick="() => Select(c)">
+                        <strong>@(string.IsNullOrWhiteSpace(c.Name.Value) ? "(isimsiz)" : c.Name.Value)</strong>
+                        <span>@(string.IsNullOrWhiteSpace(c.Company.Value) ? "Şirket yok" : c.Company.Value)</span>
+                        <span>@(string.IsNullOrWhiteSpace(c.Email.Value) ? c.Phone.Value : c.Email.Value)</span>
+                    </button>
+                }
+            </div>
+        </section>
+
+        <section class="panel">
+            @if (_selected is null)
+            {
+                <div class="empty tall">Soldan bir kişi seçin veya yeni kişi oluşturun. Aynı kişide iki cihaz farklı alanları değiştirirse ikisi de kalır.</div>
+            }
+            else
+            {
+                <header>
+                    <h2>Kişi kartı</h2>
+                    <button type="button" class="danger" @onclick="DeleteSelected">Sil</button>
+                </header>
+                <label>Ad
+                    <input @bind="_name" @bind:event="oninput" />
+                    <small>@Stamp(_selected.Name)</small>
+                </label>
+                <label>E-posta
+                    <input @bind="_email" @bind:event="oninput" />
+                    <small>@Stamp(_selected.Email)</small>
+                </label>
+                <label>Telefon
+                    <input @bind="_phone" @bind:event="oninput" />
+                    <small>@Stamp(_selected.Phone)</small>
+                </label>
+                <label>Şirket
+                    <input @bind="_company" @bind:event="oninput" />
+                    <small>@Stamp(_selected.Company)</small>
+                </label>
+                <label>Not
+                    <textarea @bind="_notes" @bind:event="oninput"></textarea>
+                    <small>@Stamp(_selected.Notes)</small>
+                </label>
+                <button type="button" class="save" @onclick="Persist">Yerelde kaydet</button>
+            }
+        </section>
+    </div>
 </div>
 
 @code {
     List<ContactRecord> _list = [];
     ContactRecord? _selected;
-    string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "", _q = "";
+    string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "", _statusKind = "", _q = "";
 
     IEnumerable<ContactRecord> Visible =>
         string.IsNullOrWhiteSpace(_q)
@@ -58,6 +96,11 @@
                     .Contains(_q, StringComparison.OrdinalIgnoreCase));
 
     protected override void OnInitialized() => _list = Store.All().ToList();
+
+    static string Stamp(FieldClock field) =>
+        field.UpdatedAt == default
+            ? "Henüz kaydedilmedi"
+            : $"Son yazan {field.DeviceId} · {field.UpdatedAt.LocalDateTime:dd MMM HH:mm}";
 
     void Select(ContactRecord c)
     {
@@ -80,30 +123,42 @@
         Store.Save(c);
         _list = Store.All().ToList();
         Select(c);
+        Flash("Yeni kişi yerelde oluşturuldu.", "ok");
     }
 
     void Persist()
     {
         if (_selected is null) return;
         var d = Store.DeviceId;
-        FieldClock Stamp(FieldClock field, string value) =>
+        FieldClock StampField(FieldClock field, string value) =>
             field.Value == value ? field : FieldMerger.Touch(value, d);
 
-        _selected.Name = Stamp(_selected.Name, _name);
-        _selected.Email = Stamp(_selected.Email, _email);
-        _selected.Phone = Stamp(_selected.Phone, _phone);
-        _selected.Company = Stamp(_selected.Company, _company);
-        _selected.Notes = Stamp(_selected.Notes, _notes);
+        _selected.Name = StampField(_selected.Name, _name);
+        _selected.Email = StampField(_selected.Email, _email);
+        _selected.Phone = StampField(_selected.Phone, _phone);
+        _selected.Company = StampField(_selected.Company, _company);
+        _selected.Notes = StampField(_selected.Notes, _notes);
         Store.Save(_selected);
         _list = Store.All().ToList();
-        _status = "Yerelde kaydedildi.";
+        Flash("Yerelde kaydedildi. Bulut ile senkron’a basınca diğer cihazlara gider.", "ok");
+    }
+
+    void DeleteSelected()
+    {
+        if (_selected is null) return;
+        _selected.DeletedAt = DateTimeOffset.UtcNow;
+        Store.Save(_selected);
+        _list = Store.All().ToList();
+        _selected = _list.FirstOrDefault();
+        if (_selected is not null) Select(_selected);
+        Flash("Kişi bu cihazdan kaldırıldı.", "ok");
     }
 
     async Task SyncNow()
     {
         try
         {
-            _status = await Sync.SyncAsync();
+            Flash(await Sync.SyncAsync(), "ok");
             _list = Store.All().ToList();
             if (_selected is not null)
             {
@@ -113,7 +168,13 @@
         }
         catch (Exception ex)
         {
-            _status = "Senkron başarısız (API ayakta mı?): " + ex.Message;
+            Flash("Senkron başarısız. LocalCrm API (5057) ayakta mı? " + ex.Message, "error");
         }
+    }
+
+    void Flash(string text, string kind)
+    {
+        _status = text;
+        _statusKind = kind;
     }
 }
