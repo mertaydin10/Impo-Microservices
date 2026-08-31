@@ -34,6 +34,7 @@ public sealed record MatchEventView(
     string? Player,
     string? PlayerIn,
     string? PlayerOut,
+    string? CardKind,
     string? Note,
     int Minute,
     int OffsetSeconds,
@@ -45,6 +46,7 @@ public sealed record MatchEventView(
         string? player = null;
         string? playerIn = null;
         string? playerOut = null;
+        string? cardKind = null;
         string? note = null;
 
         try
@@ -56,6 +58,7 @@ public sealed record MatchEventView(
             player = Read(root, "player");
             playerIn = Read(root, "playerIn");
             playerOut = Read(root, "playerOut");
+            cardKind = NormalizeCardKind(Read(root, "cardKind"));
             note = Read(root, "note");
         }
         catch (JsonException)
@@ -63,14 +66,20 @@ public sealed record MatchEventView(
             note = "Olay ayrıntısı okunamadı";
         }
 
+        if (string.Equals(matchEvent.Type, "card", StringComparison.OrdinalIgnoreCase))
+        {
+            cardKind ??= "yellow";
+        }
+
         return new MatchEventView(
             matchEvent.MatchId,
             matchEvent.Type,
-            GetTypeLabel(matchEvent.Type),
+            GetTypeLabel(matchEvent.Type, cardKind),
             side,
             player,
             playerIn,
             playerOut,
+            cardKind,
             note,
             matchEvent.OffsetSeconds / 60,
             matchEvent.OffsetSeconds,
@@ -82,11 +91,19 @@ public sealed record MatchEventView(
             ? value.GetString()
             : null;
 
-    private static string GetTypeLabel(string type) => type.ToLowerInvariant() switch
+    public static string? NormalizeCardKind(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "red" or "kirmizi" or "kırmızı" => "red",
+            "yellow" or "sari" or "sarı" => "yellow",
+            _ => null
+        };
+
+    private static string GetTypeLabel(string type, string? cardKind) => type.ToLowerInvariant() switch
     {
         "kickoff" => "Maç başladı",
         "goal" => "Gol",
-        "card" => "Sarı kart",
+        "card" => cardKind == "red" ? "Kırmızı kart" : "Sarı kart",
         "sub" => "Oyuncu değişikliği",
         "halftime" => "İlk yarı bitti",
         "fulltime" => "Maç bitti",

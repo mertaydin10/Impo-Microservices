@@ -111,6 +111,22 @@ public class EventStoreTests
     }
 
     [Fact]
+    public void MatchEventView_RedCard_UsesReadableLabel()
+    {
+        var view = MatchEventView.From(new MatchEvent(
+            "match-1",
+            "card",
+            """{"side":"home","player":"S. Yılmaz","cardKind":"red"}""",
+            38 * 60,
+            DateTimeOffset.UtcNow));
+
+        Assert.Equal("red", view.CardKind);
+        Assert.Equal("Kırmızı kart", view.TypeLabel);
+        Assert.Equal("S. Yılmaz", view.Player);
+        Assert.Equal(38, view.Minute);
+    }
+
+    [Fact]
     public void PersistentStore_AfterRestart_KeepsFinishedMatchReadOnly()
     {
         var path = Path.Combine(Path.GetTempPath(), $"spectator-{Guid.NewGuid():N}.json");

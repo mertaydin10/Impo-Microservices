@@ -19,6 +19,7 @@ builder.Services.AddSignalR();
 builder.Services.AddGrpc();
 builder.Services.AddHealthChecks();
 builder.Services.AddHttpClient<FootballApiClient>();
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin()));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -33,6 +34,7 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 MatchDemoSeed.Apply(app.Services.GetRequiredService<EventStore>(), app.Services.GetRequiredService<MetricsCollector>());
+app.UseCors();
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -114,6 +116,15 @@ app.MapPost("/api/matches/{matchId}/events", async (
         return Results.BadRequest(new { message = "Bu olay için ev sahibi veya deplasman seçilmelidir." });
     }
 
+    var cardKind = type == "card"
+        ? MatchEventView.NormalizeCardKind(dto.CardKind) ?? "yellow"
+        : null;
+    if (type == "card" && MatchEventView.NormalizeCardKind(dto.CardKind) is null &&
+        !string.IsNullOrWhiteSpace(dto.CardKind))
+    {
+        return Results.BadRequest(new { message = "Kart türü sarı veya kırmızı olmalıdır." });
+    }
+
     var offsetSeconds = dto.OffsetSeconds ?? Math.Max(0, dto.Minute) * 60;
     var payload = dto.PayloadJson ?? JsonSerializer.Serialize(new
     {
@@ -121,6 +132,7 @@ app.MapPost("/api/matches/{matchId}/events", async (
         player = dto.Player,
         playerIn = dto.PlayerIn,
         playerOut = dto.PlayerOut,
+        cardKind,
         note = dto.Note
     });
     var evt = store.Append(matchId, type, payload, offsetSeconds);
@@ -276,6 +288,7 @@ public sealed record EventDto(
     string? Player = null,
     string? PlayerIn = null,
     string? PlayerOut = null,
+    string? CardKind = null,
     string? Note = null,
     int? OffsetSeconds = null,
     string? PayloadJson = null);

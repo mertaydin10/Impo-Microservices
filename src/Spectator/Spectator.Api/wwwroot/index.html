@@ -70,6 +70,7 @@
     .match-row:hover { background: var(--surface-soft); }
     .match-row.active { background: var(--green-soft); color: #075d33; }
     .match-teams { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 650; }
+    .match-teams img { width: 18px; height: 18px; object-fit: contain; vertical-align: -3px; margin-right: 4px; }
     .match-score { margin-top: 5px; color: var(--muted); font-size: 12px; }
     .match-row.active .match-score { color: #347454; }
 
@@ -85,6 +86,21 @@
     .team-logo { width: 72px; height: 72px; margin-bottom: 12px; object-fit: contain; }
     .score { font-size: clamp(56px, 7vw, 88px); line-height: 1; font-weight: 850; letter-spacing: -.06em; }
     .minute { margin-top: 10px; color: var(--green); font-size: 17px; font-weight: 750; }
+
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--line);
+      border-top: 1px solid var(--line);
+    }
+    .stat {
+      padding: 12px 8px;
+      background: var(--surface-soft);
+      text-align: center;
+    }
+    .stat span { display: block; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+    .stat strong { display: block; margin-top: 4px; font-size: 16px; }
 
     .replay { padding: 16px 20px; background: var(--surface-soft); border-top: 1px solid var(--line); }
     .replay-head { margin-bottom: 10px; display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
@@ -103,7 +119,8 @@
     .event:last-child { border-bottom: 0; }
     .event-icon { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-soft); }
     .event.goal .event-icon { background: var(--green-soft); }
-    .event.card .event-icon { background: #fff4ce; }
+    .event.card .event-icon { background: #fff4ce; color: #b54708; }
+    .event.card.red .event-icon { background: #fee9e7; color: var(--red); }
     .event.sub .event-icon { background: #eaf2fb; }
     .event-title { font-size: 14px; font-weight: 750; }
     .event-detail { margin-top: 2px; color: var(--muted); font-size: 12px; }
@@ -150,6 +167,7 @@
       .form-body { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
       .form-body .field { margin: 0; }
       .form-body .message, .form-body .primary, .form-body .danger-link, .form-body .hint { grid-column: 1 / -1; }
+      .stats-strip { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 720px) {
       .topbar { padding: 0 16px; }
@@ -192,6 +210,12 @@
           </div>
           <div><img id="awayLogo" class="team-logo" alt="" hidden><div id="awayTeam" class="team-name">Deplasman</div></div>
         </div>
+        <div class="stats-strip">
+          <div class="stat"><span>Goller</span><strong id="statGoals">0-0</strong></div>
+          <div class="stat"><span>Sarı kart</span><strong id="statYellow">0-0</strong></div>
+          <div class="stat"><span>Kırmızı kart</span><strong id="statRed">0-0</strong></div>
+          <div class="stat"><span>Değişiklik</span><strong id="statSubs">0-0</strong></div>
+        </div>
         <div class="replay">
           <div class="replay-head"><span>Zaman çizelgesi</span><span><strong id="replayMinute">0</strong>. dakika</span></div>
           <input id="replay" type="range" min="0" max="90" value="0">
@@ -212,7 +236,7 @@
           <label for="eventType">Olay</label>
           <select id="eventType">
             <option value="goal">Gol</option>
-            <option value="card">Sarı kart</option>
+            <option value="card">Kart</option>
             <option value="sub">Oyuncu değişikliği</option>
             <option value="kickoff">Maç başladı</option>
             <option value="halftime">İlk yarı bitti</option>
@@ -222,6 +246,13 @@
         <div id="sideField" class="field">
           <label for="side">Takım</label>
           <select id="side"><option value="home">Ev sahibi</option><option value="away">Deplasman</option></select>
+        </div>
+        <div id="cardKindField" class="field" hidden>
+          <label for="cardKind">Kart</label>
+          <select id="cardKind">
+            <option value="yellow">Sarı kart</option>
+            <option value="red">Kırmızı kart</option>
+          </select>
         </div>
         <div class="two">
           <div class="field">
@@ -252,6 +283,23 @@
     <form id="newMatchForm" class="dialog-body">
       <h2 style="margin:0 0 18px;font-size:19px">Yeni maç oluştur</h2>
       <div class="field"><label for="newMatchId">Maç kodu</label><input id="newMatchId" placeholder="gs-fb" required></div>
+      <div class="two">
+        <div class="field">
+          <label for="newCountry">Ülke</label>
+          <select id="newCountry">
+            <option value="Turkey">Türkiye</option>
+            <option value="England">İngiltere</option>
+            <option value="Spain">İspanya</option>
+            <option value="Germany">Almanya</option>
+            <option value="Italy">İtalya</option>
+            <option value="France">Fransa</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="teamSearch">Kulüp ara</label>
+          <input id="teamSearch" placeholder="Galatasaray" autocomplete="off">
+        </div>
+      </div>
       <div id="footballApiNote" class="api-note">Güncel kulüpler API-Football üzerinden yükleniyor…</div>
       <div class="field"><label for="newHomeTeam">Ev sahibi</label><select id="newHomeTeam" required><option value="">Kulüp seçin</option></select></div>
       <div class="field"><label for="newAwayTeam">Deplasman</label><select id="newAwayTeam" required><option value="">Kulüp seçin</option></select></div>
@@ -287,6 +335,25 @@
         return [teamLabel(event.side), change].filter(Boolean).join(" · ");
       }
       return event.note || "";
+    }
+
+    function countBySide(type, cardKind) {
+      const items = events.filter(event => event.type === type && (!cardKind || event.cardKind === cardKind));
+      return {
+        home: items.filter(event => event.side === "home").length,
+        away: items.filter(event => event.side === "away").length
+      };
+    }
+
+    function renderStats() {
+      const goals = countBySide("goal");
+      const yellow = countBySide("card", "yellow");
+      const red = countBySide("card", "red");
+      const subs = countBySide("sub");
+      byId("statGoals").textContent = `${goals.home}-${goals.away}`;
+      byId("statYellow").textContent = `${yellow.home}-${yellow.away}`;
+      byId("statRed").textContent = `${red.home}-${red.away}`;
+      byId("statSubs").textContent = `${subs.home}-${subs.away}`;
     }
 
     function setLogo(elementId, url, teamName) {
@@ -336,10 +403,11 @@
       byId("eventCount").textContent = `${events.length} olay`;
       if (!events.length) {
         byId("eventList").innerHTML = '<div class="empty">Bu maç için henüz olay eklenmedi.</div>';
+        renderStats();
         return;
       }
       byId("eventList").innerHTML = [...events].sort((a, b) => b.offsetSeconds - a.offsetSeconds).map(event => `
-        <article class="event ${event.type}">
+        <article class="event ${event.type}${event.cardKind === "red" ? " red" : ""}">
           <div class="event-icon">${icons[event.type] || "•"}</div>
           <div>
             <div class="event-title">${event.typeLabel}</div>
@@ -347,13 +415,17 @@
           </div>
           <div class="event-minute">${event.minute}'</div>
         </article>`).join("");
+      renderStats();
     }
 
     function renderMatchList() {
       byId("matchCount").textContent = matches.length;
       byId("matchList").innerHTML = matches.map(match => `
         <button class="match-row ${match.id === currentMatchId ? "active" : ""}" data-id="${match.id}">
-          <div class="match-teams"><span>${match.homeTeam}</span><strong>${match.home} - ${match.away}</strong></div>
+          <div class="match-teams">
+            <span>${match.teams?.homeLogo ? `<img src="${match.teams.homeLogo}" alt="">` : ""}${match.homeTeam}</span>
+            <strong>${match.home} - ${match.away}</strong>
+          </div>
           <div class="match-score">${match.awayTeam} · ${match.isFinished ? "Bitti" : "Canlı"} · ${match.events} olay</div>
         </button>`).join("");
       document.querySelectorAll(".match-row").forEach(button => button.onclick = () => selectMatch(button.dataset.id));
@@ -422,6 +494,7 @@
       const type = byId("eventType").value;
       byId("sideField").hidden = !["goal", "card", "sub"].includes(type);
       byId("playerField").hidden = !["goal", "card"].includes(type);
+      byId("cardKindField").hidden = type !== "card";
       byId("subFields").hidden = type !== "sub";
       if (["goal", "card", "sub"].includes(type)) loadCurrentSquad();
     }
@@ -442,6 +515,7 @@
         player: byId("player").value.trim() || null,
         playerIn: byId("playerIn").value.trim() || null,
         playerOut: byId("playerOut").value.trim() || null,
+        cardKind: byId("eventType").value === "card" ? byId("cardKind").value : null,
         note: byId("note").value.trim() || null
       };
       const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/events`, {
@@ -461,10 +535,11 @@
     byId("replay").oninput = event => loadSnapshot(Number(event.target.value));
 
     async function loadFootballTeams() {
+      const country = byId("newCountry").value;
       const note = byId("footballApiNote");
       note.className = "api-note";
       note.textContent = "Güncel kulüpler API-Football üzerinden yükleniyor…";
-      const response = await fetch("/api/football/teams?country=Turkey");
+      const response = await fetch(`/api/football/teams?country=${encodeURIComponent(country)}`);
       if (!response.ok) {
         const error = await response.json();
         note.className = "api-note error";
@@ -473,20 +548,37 @@
       }
 
       footballTeams = await response.json();
+      fillTeamSelects();
+      note.textContent = `${footballTeams.length} güncel kulüp yüklendi.`;
+    }
+
+    function fillTeamSelects() {
+      const query = (byId("teamSearch").value || "").trim().toLowerCase();
+      const filtered = footballTeams.filter(team =>
+        !query || team.name.toLowerCase().includes(query));
       const options = [
         '<option value="">Kulüp seçin</option>',
-        ...footballTeams.map(team =>
+        ...filtered.map(team =>
           `<option value="${team.id}" data-name="${team.name}" data-logo="${team.logo || ""}">${team.name}</option>`)
       ].join("");
+      const homeValue = byId("newHomeTeam").value;
+      const awayValue = byId("newAwayTeam").value;
       byId("newHomeTeam").innerHTML = options;
       byId("newAwayTeam").innerHTML = options;
-      note.textContent = `${footballTeams.length} güncel kulüp yüklendi.`;
+      if ([...byId("newHomeTeam").options].some(option => option.value === homeValue)) {
+        byId("newHomeTeam").value = homeValue;
+      }
+      if ([...byId("newAwayTeam").options].some(option => option.value === awayValue)) {
+        byId("newAwayTeam").value = awayValue;
+      }
     }
 
     byId("newMatchButton").onclick = async () => {
       byId("newMatchDialog").showModal();
-      if (!footballTeams.length) await loadFootballTeams();
+      await loadFootballTeams();
     };
+    byId("newCountry").onchange = loadFootballTeams;
+    byId("teamSearch").oninput = fillTeamSelects;
     byId("cancelNewMatch").onclick = () => byId("newMatchDialog").close();
     byId("newMatchForm").onsubmit = async event => {
       event.preventDefault();
