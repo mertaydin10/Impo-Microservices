@@ -48,6 +48,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5209
       - API_BASE_URL=http://localcrm-api:5057
+      - CloudUrl=http://localcrm-api:5057
     depends_on:
       - localcrm-api
     networks:

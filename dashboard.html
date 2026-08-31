@@ -221,25 +221,25 @@
     <header>
       <h1>🚀 Impo</h1>
       <p class="subtitle">Dört Yaratıcı .NET Ürünü</p>
-      <span class="version">v3.0.0</span>
+      <span class="version">v4.1</span>
     </header>
 
     <div class="stats">
       <div class="stat-card">
-        <div class="stat-value">4</div>
-        <div class="stat-label">Servis</div>
-      </div>
-      <div class="stat-card">
         <div class="stat-value" id="onlineCount">-</div>
-        <div class="stat-label">Çalışıyor</div>
+        <div class="stat-label">Çalışan servis</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">27</div>
-        <div class="stat-label">Test Geçti</div>
+        <div class="stat-value" id="matchCount">-</div>
+        <div class="stat-label">Kayıtlı maç</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">100%</div>
-        <div class="stat-label">Success Rate</div>
+        <div class="stat-value" id="contactCount">-</div>
+        <div class="stat-label">CRM kişi</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="auditCount">-</div>
+        <div class="stat-label">Kapı kaydı</div>
       </div>
     </div>
 
@@ -384,13 +384,13 @@
 
     <footer class="footer">
       <p>
-        <strong>Impo v3.0.0</strong> - Production Ready 🚀
+        <strong>Impo</strong> — Spectator, LocalCrm, PromptGateway, Archeologist
       </p>
       <p style="margin-top: 8px;">
-        <a href="https://github.com" target="_blank">GitHub</a> •
-        <a href="API.md" target="_blank">API Docs</a> •
-        <a href="TESTING.md" target="_blank">Testing Guide</a> •
-        <a href="FINAL_SUMMARY.md" target="_blank">Full Summary</a>
+        <a href="https://github.com/mertaydin10/Impo-Microservices" target="_blank">GitHub</a> ·
+        <a href="http://localhost:5185" target="_blank">Maç merkezi</a> ·
+        <a href="http://localhost:5209" target="_blank">CRM</a> ·
+        <a href="http://localhost:5047" target="_blank">Kapı</a>
       </p>
     </footer>
   </div>
@@ -426,6 +426,23 @@
       
       const onlineCount = document.querySelectorAll('.status.online').length;
       document.getElementById('onlineCount').textContent = onlineCount;
+      await loadLiveCounts();
+    }
+
+    async function countJson(url) {
+      const response = await fetch(url);
+      if (!response.ok) return "-";
+      const data = await response.json();
+      return Array.isArray(data) ? data.length : Object.keys(data).length;
+    }
+
+    async function loadLiveCounts() {
+      try { document.getElementById('matchCount').textContent = await countJson('http://localhost:5185/api/matches'); }
+      catch { document.getElementById('matchCount').textContent = "-"; }
+      try { document.getElementById('contactCount').textContent = await countJson('http://localhost:5057/contacts'); }
+      catch { document.getElementById('contactCount').textContent = "-"; }
+      try { document.getElementById('auditCount').textContent = await countJson('http://localhost:5047/admin/audit'); }
+      catch { document.getElementById('auditCount').textContent = "-"; }
     }
 
     function showArcheologistInfo() {
@@ -438,9 +455,7 @@ JSON çıktı:
 dotnet run --project src/Archeologist/Archeologist.Cli -- samples/legacy --json
 
 Sadece kritik bulguları:
-dotnet run --project src/Archeologist/Archeologist.Cli -- samples/legacy --min-severity CRITICAL
-
-Daha fazla bilgi için TESTING.md dosyasına bakın!`);
+dotnet run --project src/Archeologist/Archeologist.Cli -- samples/legacy --min-severity CRITICAL`);
     }
 
     // İlk kontrol
