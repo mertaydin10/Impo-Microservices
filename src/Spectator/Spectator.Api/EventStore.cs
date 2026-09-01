@@ -126,6 +126,29 @@ public sealed class EventStore
 
     public IReadOnlyList<string> GetAllMatches() => _streams.Keys.Concat(_teams.Keys).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
+    public MatchEvent? TryUndoLast(string matchId)
+    {
+        if (!_streams.TryGetValue(matchId, out var list))
+        {
+            return null;
+        }
+
+        MatchEvent last;
+        lock (list)
+        {
+            if (list.Count == 0)
+            {
+                return null;
+            }
+
+            last = list[^1];
+            list.RemoveAt(list.Count - 1);
+        }
+
+        Persist();
+        return last;
+    }
+
     public void Clear(string matchId)
     {
         _streams.TryRemove(matchId, out _);

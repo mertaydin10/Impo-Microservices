@@ -221,6 +221,26 @@ app.MapGet("/api/matches", (EventStore store) =>
 .WithName("GetAllMatches")
 .WithTags("Matches");
 
+app.MapDelete("/api/matches/{matchId}/events/last", async (
+    string matchId,
+    EventStore store,
+    IHubContext<MatchHub> hub) =>
+{
+    var removed = store.TryUndoLast(matchId);
+    if (removed is null)
+    {
+        return Results.NotFound(new { message = "Geri alınacak olay yok." });
+    }
+
+    var last = store.Stream(matchId).Select(e => e.OffsetSeconds).DefaultIfEmpty(0).Max();
+    var snap = store.Replay(matchId, last);
+    await hub.Clients.Group(matchId).SendAsync("snapshot", snap);
+    await hub.Clients.Group(matchId).SendAsync("undone", MatchEventView.From(removed));
+    return Results.Ok(new { @event = MatchEventView.From(removed), snapshot = snap });
+})
+.WithName("UndoLastMatchEvent")
+.WithTags("Matches");
+
 app.MapDelete("/api/matches/{matchId}", (string matchId, EventStore store) =>
 {
     store.Clear(matchId);

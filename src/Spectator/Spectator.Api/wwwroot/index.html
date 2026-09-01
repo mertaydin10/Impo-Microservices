@@ -38,6 +38,9 @@
 
     .brand { display: flex; align-items: center; gap: 11px; font-weight: 750; font-size: 18px; }
     .brand-mark { width: 32px; height: 32px; border-radius: 9px; background: var(--green); display: grid; place-items: center; }
+    .app-nav { display: flex; gap: 6px; }
+    .app-nav a { color: #c8d3cc; text-decoration: none; font-size: 13px; padding: 6px 10px; border-radius: 8px; }
+    .app-nav a.on, .app-nav a:hover { background: #1c3a2c; color: #fff; }
     .connection { display: flex; align-items: center; gap: 8px; color: #c8d3cc; font-size: 13px; }
     .connection-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
     .connection.live .connection-dot { background: #49d17d; }
@@ -57,7 +60,11 @@
     .card-head { padding: 17px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
 
     .matches { overflow: hidden; }
-    .match-list { padding: 8px; display: grid; gap: 5px; }
+    .match-tools { padding: 10px 10px 0; display: grid; gap: 8px; }
+    .filters { display: flex; gap: 6px; }
+    .filters button { flex: 1; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 12px; font-weight: 700; }
+    .filters button.on { background: var(--green-soft); color: var(--green); border-color: #9bc6ad; }
+    .match-list { padding: 8px; display: grid; gap: 5px; max-height: calc(100vh - 220px); overflow: auto; }
     .match-row {
       width: 100%;
       padding: 12px;
@@ -105,6 +112,10 @@
     .replay { padding: 16px 20px; background: var(--surface-soft); border-top: 1px solid var(--line); }
     .replay-head { margin-bottom: 10px; display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
     input[type="range"] { width: 100%; accent-color: var(--green); }
+    .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); }
+    .quick button { height: 38px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font-weight: 700; font-size: 12px; }
+    .quick .goal { background: var(--green-soft); color: var(--green); border-color: #9bc6ad; }
+    .quick .wide { grid-column: 1 / -1; }
 
     .feed { margin-top: 20px; overflow: hidden; }
     .event-list { padding: 8px 18px 18px; max-height: 450px; overflow: auto; }
@@ -184,6 +195,11 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-mark">S</span> Spectator</div>
+    <nav class="app-nav">
+      <a class="on" href="/">Maç</a>
+      <a href="http://localhost:5209">CRM</a>
+      <a href="http://localhost:5047">Kapı</a>
+    </nav>
     <div id="connection" class="connection"><span class="connection-dot"></span><span id="connectionText">Bağlanıyor</span></div>
   </header>
 
@@ -192,6 +208,14 @@
       <div class="card-head">
         <h2 class="card-title">Maçlar <span id="matchCount" style="color:var(--muted);font-weight:500">0</span></h2>
         <button id="newMatchButton" class="new-match">+ Yeni maç</button>
+      </div>
+      <div class="match-tools">
+        <input id="matchSearch" placeholder="Maç veya takım ara" autocomplete="off">
+        <div class="filters">
+          <button type="button" data-filter="all" class="on">Tümü</button>
+          <button type="button" data-filter="live">Canlı</button>
+          <button type="button" data-filter="done">Bitti</button>
+        </div>
       </div>
       <div id="matchList" class="match-list"></div>
     </aside>
@@ -219,6 +243,11 @@
         <div class="replay">
           <div class="replay-head"><span>Zaman çizelgesi</span><span><strong id="replayMinute">0</strong>. dakika</span></div>
           <input id="replay" type="range" min="0" max="90" value="0">
+        </div>
+        <div id="quickActions" class="quick">
+          <button type="button" id="quickHomeGoal" class="goal">+ Gol ev</button>
+          <button type="button" id="quickAwayGoal" class="goal">+ Gol dep</button>
+          <button type="button" id="undoLast" class="wide">Son olayı geri al</button>
         </div>
       </section>
 
@@ -282,7 +311,8 @@
   <dialog id="newMatchDialog">
     <form id="newMatchForm" class="dialog-body">
       <h2 style="margin:0 0 18px;font-size:19px">Yeni maç oluştur</h2>
-      <div class="field"><label for="newMatchId">Maç kodu</label><input id="newMatchId" placeholder="gs-fb" required></div>
+      <p class="api-note">Kulüpleri seçince maç kodu otomatik doldurulur; isterseniz değiştirebilirsiniz.</p>
+      <div class="field"><label for="newMatchId">Maç kodu</label><input id="newMatchId" placeholder="galatasaray-fenerbahce" required></div>
       <div class="two">
         <div class="field">
           <label for="newCountry">Ülke</label>
@@ -315,6 +345,7 @@
     let matches = [];
     let events = [];
     let footballTeams = [];
+    let matchFilter = "all";
     const squadCache = new Map();
     const byId = id => document.getElementById(id);
     const connection = new signalR.HubConnectionBuilder().withUrl("/hub/match").withAutomaticReconnect().build();
@@ -337,8 +368,13 @@
       return event.note || "";
     }
 
+    function eventsAtReplay() {
+      const minute = Number(byId("replay").value || 0);
+      return events.filter(event => event.minute <= minute);
+    }
+
     function countBySide(type, cardKind) {
-      const items = events.filter(event => event.type === type && (!cardKind || event.cardKind === cardKind));
+      const items = eventsAtReplay().filter(event => event.type === type && (!cardKind || event.cardKind === cardKind));
       return {
         home: items.filter(event => event.side === "home").length,
         away: items.filter(event => event.side === "away").length
@@ -400,13 +436,14 @@
     }
 
     function renderEvents() {
-      byId("eventCount").textContent = `${events.length} olay`;
-      if (!events.length) {
-        byId("eventList").innerHTML = '<div class="empty">Bu maç için henüz olay eklenmedi.</div>';
+      const visible = eventsAtReplay();
+      byId("eventCount").textContent = `${visible.length} / ${events.length} olay`;
+      if (!visible.length) {
+        byId("eventList").innerHTML = '<div class="empty">Bu dakikaya kadar olay yok. Yeni maç oluşturup gol, kart veya değişiklik ekleyin.</div>';
         renderStats();
         return;
       }
-      byId("eventList").innerHTML = [...events].sort((a, b) => b.offsetSeconds - a.offsetSeconds).map(event => `
+      byId("eventList").innerHTML = [...visible].sort((a, b) => b.offsetSeconds - a.offsetSeconds).map(event => `
         <article class="event ${event.type}${event.cardKind === "red" ? " red" : ""}">
           <div class="event-icon">${icons[event.type] || "•"}</div>
           <div>
@@ -418,9 +455,22 @@
       renderStats();
     }
 
+    function visibleMatches() {
+      const query = (byId("matchSearch").value || "").trim().toLowerCase();
+      return [...matches]
+        .filter(match => matchFilter === "all" || (matchFilter === "live" ? !match.isFinished : match.isFinished))
+        .filter(match => !query || `${match.homeTeam} ${match.awayTeam} ${match.id}`.toLowerCase().includes(query))
+        .sort((a, b) => Number(a.isFinished) - Number(b.isFinished) || b.events - a.events);
+    }
+
     function renderMatchList() {
-      byId("matchCount").textContent = matches.length;
-      byId("matchList").innerHTML = matches.map(match => `
+      const list = visibleMatches();
+      byId("matchCount").textContent = `${list.length}/${matches.length}`;
+      if (!list.length) {
+        byId("matchList").innerHTML = '<div class="empty">Eşleşen maç yok. Filtreyi değiştirin veya yeni maç ekleyin.</div>';
+        return;
+      }
+      byId("matchList").innerHTML = list.map(match => `
         <button class="match-row ${match.id === currentMatchId ? "active" : ""}" data-id="${match.id}">
           <div class="match-teams">
             <span>${match.teams?.homeLogo ? `<img src="${match.teams.homeLogo}" alt="">` : ""}${match.homeTeam}</span>
@@ -434,7 +484,10 @@
     async function loadMatches(preferredId) {
       const response = await fetch("/api/matches");
       matches = await response.json();
-      if (!currentMatchId) currentMatchId = preferredId || matches[0]?.id || "";
+      if (!currentMatchId) {
+        const live = matches.find(match => !match.isFinished);
+        currentMatchId = preferredId || live?.id || matches[0]?.id || "";
+      }
       renderMatchList();
       if (currentMatchId) await loadMatch();
     }
@@ -454,10 +507,25 @@
       byId("replay").value = lastMinute;
       byId("minute").value = Math.min(130, lastMinute + 1);
       setMatchFinished(match.isFinished);
+      updateSideLabels(match);
+      updateQuickLabels(match);
       await loadCurrentSquad();
       await loadSnapshot(lastMinute);
       renderEvents();
       renderMatchList();
+    }
+
+    function updateSideLabels(match) {
+      const selected = byId("side").value || "home";
+      byId("side").innerHTML = `
+        <option value="home">${match.homeTeam}</option>
+        <option value="away">${match.awayTeam}</option>`;
+      byId("side").value = selected;
+    }
+
+    function updateQuickLabels(match) {
+      byId("quickHomeGoal").textContent = `+ Gol ${match.homeTeam}`;
+      byId("quickAwayGoal").textContent = `+ Gol ${match.awayTeam}`;
     }
 
     function setMatchFinished(isFinished) {
@@ -468,18 +536,23 @@
       byId("eventForm").querySelectorAll("input, select, button[type='submit']").forEach(control => {
         control.disabled = isFinished;
       });
+      byId("quickHomeGoal").disabled = isFinished;
+      byId("quickAwayGoal").disabled = isFinished;
+      byId("undoLast").disabled = false;
       if (isFinished) {
-        showMessage("Bu maç tamamlandı. Yeni olay eklenemez.", "error");
+        showMessage("Bu maç tamamlandı. Yanlışlıkla bitirdiyeniz son olayı geri alabilirsiniz.", "error");
       }
     }
 
     async function loadSnapshot(minute) {
+      if (!currentMatchId) return;
       const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/replay?at=${minute * 60}`);
       const snapshot = await response.json();
       byId("homeScore").textContent = snapshot.home;
       byId("awayScore").textContent = snapshot.away;
       byId("clockMinute").textContent = minute;
       byId("replayMinute").textContent = minute;
+      renderEvents();
     }
 
     async function selectMatch(matchId) {
@@ -530,6 +603,51 @@
       await loadMatches(currentMatchId);
     };
 
+    async function postQuickGoal(side) {
+      if (!currentMatchId) return showMessage("Önce bir maç oluşturun.", "error");
+      const minute = Number(byId("minute").value || byId("replay").value || 0);
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "goal", minute, side })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        return showMessage(error.message || "Gol kaydedilemedi.", "error");
+      }
+      byId("minute").value = Math.min(130, minute + 1);
+      showMessage("Gol kaydedildi.", "success");
+      await loadMatches(currentMatchId);
+    }
+
+    async function undoLast() {
+      if (!currentMatchId) return;
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/events/last`, { method: "DELETE" });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return showMessage(error.message || "Geri alınacak olay yok.", "error");
+      }
+      showMessage("Son olay geri alındı.", "success");
+      await loadMatches(currentMatchId);
+    }
+
+    function slug(value) {
+      return (value || "")
+        .toLowerCase()
+        .replaceAll("ç", "c").replaceAll("ğ", "g").replaceAll("ı", "i")
+        .replaceAll("ö", "o").replaceAll("ş", "s").replaceAll("ü", "u")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 16);
+    }
+
+    function suggestMatchId() {
+      const home = byId("newHomeTeam").selectedOptions[0]?.dataset.name;
+      const away = byId("newAwayTeam").selectedOptions[0]?.dataset.name;
+      if (!home || !away) return;
+      byId("newMatchId").value = `${slug(home)}-${slug(away)}`;
+    }
+
     byId("eventType").onchange = updateForm;
     byId("side").onchange = loadCurrentSquad;
     byId("replay").oninput = event => loadSnapshot(Number(event.target.value));
@@ -571,6 +689,7 @@
       if ([...byId("newAwayTeam").options].some(option => option.value === awayValue)) {
         byId("newAwayTeam").value = awayValue;
       }
+      suggestMatchId();
     }
 
     byId("newMatchButton").onclick = async () => {
@@ -579,6 +698,19 @@
     };
     byId("newCountry").onchange = loadFootballTeams;
     byId("teamSearch").oninput = fillTeamSelects;
+    byId("newHomeTeam").onchange = suggestMatchId;
+    byId("newAwayTeam").onchange = suggestMatchId;
+    byId("matchSearch").oninput = renderMatchList;
+    document.querySelectorAll(".filters button").forEach(button => {
+      button.onclick = () => {
+        matchFilter = button.dataset.filter;
+        document.querySelectorAll(".filters button").forEach(item => item.classList.toggle("on", item === button));
+        renderMatchList();
+      };
+    });
+    byId("quickHomeGoal").onclick = () => postQuickGoal("home");
+    byId("quickAwayGoal").onclick = () => postQuickGoal("away");
+    byId("undoLast").onclick = undoLast;
     byId("cancelNewMatch").onclick = () => byId("newMatchDialog").close();
     byId("newMatchForm").onsubmit = async event => {
       event.preventDefault();
@@ -620,6 +752,9 @@
       events.push(event);
       await loadMatches(currentMatchId);
     });
+    connection.on("undone", async () => {
+      await loadMatches(currentMatchId);
+    });
     connection.on("snapshot", snapshot => {
       if (snapshot.matchId !== currentMatchId) return;
       byId("homeScore").textContent = snapshot.home;
@@ -640,7 +775,7 @@
       await connection.start();
       byId("connectionText").textContent = "Canlı bağlantı";
       byId("connection").classList.add("live");
-      await loadMatches("gs-fb");
+      await loadMatches();
       if (currentMatchId) await connection.invoke("JoinMatch", currentMatchId);
     }
 

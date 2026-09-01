@@ -111,6 +111,34 @@ public class EventStoreTests
     }
 
     [Fact]
+    public void TryUndoLast_RemovesMostRecentEvent()
+    {
+        var store = new EventStore();
+        store.Append("match-1", "kickoff", "{}", 0);
+        store.Append("match-1", "goal", """{"side":"home"}""", 12 * 60);
+
+        var removed = store.TryUndoLast("match-1");
+
+        Assert.Equal("goal", removed?.Type);
+        Assert.Single(store.Stream("match-1"));
+        Assert.Equal(0, store.Replay("match-1", 12 * 60).Home);
+    }
+
+    [Fact]
+    public void TryUndoLast_WhenFinished_ReopensMatch()
+    {
+        var store = new EventStore();
+        store.Append("match-1", "goal", """{"side":"home"}""", 10 * 60);
+        store.Append("match-1", "fulltime", "{}", 90 * 60);
+
+        store.TryUndoLast("match-1");
+
+        Assert.False(store.IsFinished("match-1"));
+        var restored = store.Append("match-1", "goal", """{"side":"away"}""", 70 * 60);
+        Assert.Equal("goal", restored.Type);
+    }
+
+    [Fact]
     public void MatchEventView_RedCard_UsesReadableLabel()
     {
         var view = MatchEventView.From(new MatchEvent(
