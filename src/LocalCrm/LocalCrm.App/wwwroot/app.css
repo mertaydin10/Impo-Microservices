@@ -25,6 +25,9 @@ button { cursor: pointer; }
 }
 .brand { display: flex; align-items: center; gap: 11px; font-weight: 750; font-size: 18px; }
 .brand-mark { width: 32px; height: 32px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; }
+.app-nav { display: flex; gap: 6px; }
+.app-nav a { color: #c8d3dc; text-decoration: none; font-size: 13px; padding: 6px 10px; border-radius: 8px; }
+.app-nav a.on, .app-nav a:hover { background: #1c3a52; color: #fff; }
 .device { color: #c8d3dc; font-size: 13px; }
 
 .page { max-width: 1100px; margin: 0 auto; padding: 24px; }
@@ -33,7 +36,8 @@ button { cursor: pointer; }
 .banner.error { background: #fee9e7; color: #912018; }
 
 .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
-.toolbar input { flex: 1; min-width: 180px; height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; }
+.toolbar input, .toolbar select { height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.toolbar input { flex: 1; min-width: 180px; }
 .toolbar button, .save {
   height: 42px; padding: 0 14px; border: 0; border-radius: 9px; background: var(--accent); color: #fff; font-weight: 700;
 }
@@ -65,6 +69,7 @@ button { cursor: pointer; }
 }
 .panel textarea { min-height: 90px; }
 .panel small { font-weight: 500; color: var(--muted); }
+.panel small a { color: var(--accent); }
 .save { margin: 6px 18px 18px; }
 .danger { height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: #fee9e7; color: var(--danger); font-weight: 700; font-size: 12px; }
 
