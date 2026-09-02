@@ -139,6 +139,21 @@ public class EventStoreTests
     }
 
     [Fact]
+    public void MatchSummary_IncludesScoreAndReadableEvents()
+    {
+        var store = new EventStore();
+        store.SetTeams("match-1", "Galatasaray", "Fenerbahçe");
+        store.Append("match-1", "kickoff", """{"note":"Başladı"}""", 0);
+        store.Append("match-1", "goal", """{"side":"home","player":"Icardi"}""", 12 * 60);
+
+        var summary = MatchSummary.Build(store, "match-1");
+
+        Assert.Contains("Galatasaray 1-0 Fenerbahçe", summary);
+        Assert.Contains("Durum: Canlı", summary);
+        Assert.Contains("12' Gol — Galatasaray · Icardi", summary);
+    }
+
+    [Fact]
     public void MatchEventView_RedCard_UsesReadableLabel()
     {
         var view = MatchEventView.From(new MatchEvent(

@@ -221,6 +221,18 @@ app.MapGet("/api/matches", (EventStore store) =>
 .WithName("GetAllMatches")
 .WithTags("Matches");
 
+app.MapGet("/api/matches/{matchId}/summary", (string matchId, EventStore store) =>
+{
+    if (!store.Exists(matchId))
+    {
+        return Results.NotFound(new { message = "Maç bulunamadı." });
+    }
+
+    return Results.Text(MatchSummary.Build(store, matchId), "text/plain; charset=utf-8");
+})
+.WithName("GetMatchSummary")
+.WithTags("Matches");
+
 app.MapDelete("/api/matches/{matchId}/events/last", async (
     string matchId,
     EventStore store,

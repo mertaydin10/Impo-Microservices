@@ -85,7 +85,8 @@
     .new-match:hover { background: var(--green-soft); }
 
     .score-card { overflow: hidden; }
-    .score-meta { padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    .score-meta { padding: 15px 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    .ghost-btn { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); font-size: 12px; font-weight: 700; }
     .live-pill { padding: 4px 8px; border-radius: 99px; background: #fee9e7; color: var(--red); font-weight: 750; font-size: 11px; letter-spacing: .04em; }
     .live-pill.finished { background: #e8ece9; color: #556159; }
     .scoreboard { padding: 36px 24px 30px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px; text-align: center; }
@@ -108,6 +109,8 @@
     }
     .stat span { display: block; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
     .stat strong { display: block; margin-top: 4px; font-size: 16px; }
+    .scorers { padding: 10px 20px 14px; display: flex; flex-wrap: wrap; gap: 6px; background: var(--surface-soft); border-top: 1px solid var(--line); min-height: 20px; }
+    .scorers span { padding: 4px 8px; border-radius: 99px; background: #fff; border: 1px solid var(--line); font-size: 11px; font-weight: 700; }
 
     .replay { padding: 16px 20px; background: var(--surface-soft); border-top: 1px solid var(--line); }
     .replay-head { margin-bottom: 10px; display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
@@ -224,6 +227,7 @@
       <section class="card score-card">
         <div class="score-meta">
           <span id="matchCode">Maç seçilmedi</span>
+          <button type="button" id="copySummary" class="ghost-btn">Özeti kopyala</button>
           <span id="matchState" class="live-pill">CANLI</span>
         </div>
         <div class="scoreboard">
@@ -240,6 +244,7 @@
           <div class="stat"><span>Kırmızı kart</span><strong id="statRed">0-0</strong></div>
           <div class="stat"><span>Değişiklik</span><strong id="statSubs">0-0</strong></div>
         </div>
+        <div id="scorers" class="scorers"></div>
         <div class="replay">
           <div class="replay-head"><span>Zaman çizelgesi</span><span><strong id="replayMinute">0</strong>. dakika</span></div>
           <input id="replay" type="range" min="0" max="90" value="0">
@@ -248,6 +253,7 @@
           <button type="button" id="quickHomeGoal" class="goal">+ Gol ev</button>
           <button type="button" id="quickAwayGoal" class="goal">+ Gol dep</button>
           <button type="button" id="undoLast" class="wide">Son olayı geri al</button>
+          <button type="button" id="finishMatch" class="wide">Maçı bitir</button>
         </div>
       </section>
 
@@ -390,6 +396,10 @@
       byId("statYellow").textContent = `${yellow.home}-${yellow.away}`;
       byId("statRed").textContent = `${red.home}-${red.away}`;
       byId("statSubs").textContent = `${subs.home}-${subs.away}`;
+      const goals = eventsAtReplay().filter(event => event.type === "goal").sort((a, b) => a.minute - b.minute);
+      byId("scorers").innerHTML = goals.length
+        ? goals.map(event => `<span>${event.minute}' ${event.player || teamLabel(event.side)}</span>`).join("")
+        : "";
     }
 
     function setLogo(elementId, url, teamName) {
@@ -538,6 +548,7 @@
       });
       byId("quickHomeGoal").disabled = isFinished;
       byId("quickAwayGoal").disabled = isFinished;
+      byId("finishMatch").disabled = isFinished;
       byId("undoLast").disabled = false;
       if (isFinished) {
         showMessage("Bu maç tamamlandı. Yanlışlıkla bitirdiyeniz son olayı geri alabilirsiniz.", "error");
@@ -641,11 +652,46 @@
         .slice(0, 16);
     }
 
+    function uniqueMatchId(base) {
+      let id = base;
+      let n = 2;
+      const used = new Set(matches.map(match => match.id.toLowerCase()));
+      while (used.has(id.toLowerCase())) {
+        id = `${base}-${n++}`;
+      }
+      return id;
+    }
+
     function suggestMatchId() {
       const home = byId("newHomeTeam").selectedOptions[0]?.dataset.name;
       const away = byId("newAwayTeam").selectedOptions[0]?.dataset.name;
       if (!home || !away) return;
-      byId("newMatchId").value = `${slug(home)}-${slug(away)}`;
+      byId("newMatchId").value = uniqueMatchId(`${slug(home)}-${slug(away)}`);
+    }
+
+    async function finishMatch() {
+      if (!currentMatchId) return;
+      if (!confirm("Maç bitsin mi? Bundan sonra olay eklenemez.")) return;
+      const minute = Number(byId("minute").value || 90);
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "fulltime", minute, note: "Maç bitti" })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        return showMessage(error.message || "Maç bitirilemedi.", "error");
+      }
+      showMessage("Maç arşivlendi.", "success");
+      await loadMatches(currentMatchId);
+    }
+
+    async function copySummary() {
+      if (!currentMatchId) return;
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/summary`);
+      if (!response.ok) return showMessage("Özet alınamadı.", "error");
+      await navigator.clipboard.writeText(await response.text());
+      showMessage("Maç özeti panoya kopyalandı.", "success");
     }
 
     byId("eventType").onchange = updateForm;
@@ -711,13 +757,15 @@
     byId("quickHomeGoal").onclick = () => postQuickGoal("home");
     byId("quickAwayGoal").onclick = () => postQuickGoal("away");
     byId("undoLast").onclick = undoLast;
+    byId("finishMatch").onclick = finishMatch;
+    byId("copySummary").onclick = copySummary;
     byId("cancelNewMatch").onclick = () => byId("newMatchDialog").close();
     byId("newMatchForm").onsubmit = async event => {
       event.preventDefault();
       const home = byId("newHomeTeam").selectedOptions[0];
       const away = byId("newAwayTeam").selectedOptions[0];
       const body = {
-        matchId: byId("newMatchId").value.trim(),
+        matchId: uniqueMatchId(byId("newMatchId").value.trim()),
         homeTeam: home.dataset.name,
         awayTeam: away.dataset.name,
         homeTeamId: Number(home.value),
@@ -733,6 +781,11 @@
         alert(error.message || "Maç oluşturulamadı.");
         return;
       }
+      await fetch(`/api/matches/${encodeURIComponent(body.matchId)}/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "kickoff", minute: 0, note: "Maç başladı" })
+      });
       currentMatchId = body.matchId;
       byId("newMatchDialog").close();
       byId("newMatchForm").reset();
