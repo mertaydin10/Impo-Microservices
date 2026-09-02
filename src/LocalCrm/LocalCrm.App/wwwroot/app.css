@@ -34,6 +34,9 @@ button { cursor: pointer; }
 .banner { margin-bottom: 16px; padding: 10px 12px; border-radius: 10px; font-size: 13px; }
 .banner.ok { background: #e4f3ea; color: #075d33; }
 .banner.error { background: #fee9e7; color: #912018; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -8px 0 16px; }
+.chips button { height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 99px; background: #fff; font-size: 12px; font-weight: 700; }
+.chips button.on { background: #e8f1fc; color: #1849a9; border-color: #b6d0f5; }
 
 .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
 .toolbar input, .toolbar select { height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }

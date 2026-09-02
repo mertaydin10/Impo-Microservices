@@ -32,8 +32,20 @@
         </select>
         <button type="button" @onclick="SaveNew">+ Yeni kişi</button>
         <button type="button" class="ghost" @onclick="SyncNow">Bulut ile senkron</button>
+        <button type="button" class="ghost" @onclick="ExportCsv">CSV indir</button>
         <span class="count">@Visible.Count() kişi</span>
     </div>
+
+    @if (Companies.Any())
+    {
+        <div class="chips">
+            <button type="button" class="@(_companyFilter == "" ? "on" : null)" @onclick="ClearCompanyFilter">Tüm şirketler</button>
+            @foreach (var company in Companies)
+            {
+                <button type="button" class="@(_companyFilter == company ? "on" : null)" @onclick="() => _companyFilter = company">@company</button>
+            }
+        </div>
+    }
 
     <div class="grid">
         <section class="panel">
@@ -111,7 +123,16 @@
 @code {
     List<ContactRecord> _list = [];
     ContactRecord? _selected;
-    string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "", _statusKind = "", _q = "", _sort = "name";
+    string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "", _statusKind = "", _q = "", _sort = "name", _companyFilter = "";
+
+    void ClearCompanyFilter() => _companyFilter = "";
+
+    IEnumerable<string> Companies =>
+        _list.Select(c => c.Company.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value)
+            .Take(12);
 
     bool IsDirty =>
         _selected is not null &&
@@ -130,6 +151,10 @@
                 : _list.Where(c =>
                     (c.Name.Value + " " + c.Email.Value + " " + c.Company.Value + " " + c.Phone.Value)
                         .Contains(_q, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(_companyFilter))
+            {
+                items = items.Where(c => c.Company.Value.Equals(_companyFilter, StringComparison.OrdinalIgnoreCase));
+            }
             return _sort switch
             {
                 "company" => items.OrderBy(c => c.Company.Value).ThenBy(c => c.Name.Value),
@@ -209,7 +234,28 @@
         _selected.Notes = StampField(_selected.Notes, _notes);
         Store.Save(_selected);
         _list = Store.All().ToList();
-        Flash("Yerelde kaydedildi. Bulut ile senkron’a basınca diğer cihazlara gider.", "ok");
+        var duplicate = !string.IsNullOrWhiteSpace(_email) &&
+            _list.Any(c => c.Id != _selected.Id && c.Email.Value.Equals(_email, StringComparison.OrdinalIgnoreCase));
+        Flash(
+            duplicate
+                ? "Kaydedildi. Bu e-posta başka bir kişide de var."
+                : "Yerelde kaydedildi. ⌘S / Ctrl+S ile de kaydedebilirsiniz.",
+            duplicate ? "error" : "ok");
+    }
+
+    async Task ExportCsv()
+    {
+        var header = "Ad,Eposta,Telefon,Sirket,Not";
+        var lines = Visible.Select(c => string.Join(",",
+            Csv(c.Name.Value), Csv(c.Email.Value), Csv(c.Phone.Value), Csv(c.Company.Value), Csv(c.Notes.Value)));
+        await Js.InvokeVoidAsync("impoDownload", "kisiler.csv", header + "\n" + string.Join("\n", lines));
+        Flash($"{Visible.Count()} kişi CSV olarak indirildi.", "ok");
+    }
+
+    static string Csv(string value)
+    {
+        var text = value.Replace("\"", "\"\"");
+        return text.Contains(',') || text.Contains('"') || text.Contains('\n') ? $"\"{text}\"" : text;
     }
 
     async Task DeleteSelected()
