@@ -129,13 +129,18 @@
           <div><span>Yönlenen model</span><strong id="routedModel">—</strong></div>
         </div>
         <div class="field" style="margin-top:14px">
-          <label>Kapı yanıtı</label>
+          <label>Kapı yanıtı <button id="copyAnswer" class="ghost tiny" type="button">Kopyala</button></label>
           <div id="answer" class="answer">Henüz istek gönderilmedi.</div>
         </div>
       </div>
     </section>
     <div>
       <section class="card" style="margin-bottom:20px">
+        <div class="card-head">
+          <h2 class="card-title">Model yönlendirme</h2>
+        </div>
+        <div id="routeList" class="body"></div>
+      </section>
         <div class="card-head">
           <h2 class="card-title">Bütçe</h2>
           <button id="refreshBudget" class="ghost" type="button">Yenile</button>
@@ -272,7 +277,28 @@
     await loadBudget();
   }
 
+  async function loadRoutes() {
+    const routes = await (await fetch("/admin/routes")).json();
+    const keys = Object.keys(routes);
+    byId("routeList").innerHTML = keys.map(key =>
+      `<div class="budget-top" style="margin-bottom:8px"><strong>${key}</strong><span>${routes[key]}</span></div>`
+    ).join("") || '<div class="empty">Rota yok.</div>';
+  }
+
+  async function copyAnswer() {
+    const text = byId("answer").textContent.trim();
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    showMessage("Yanıt panoya kopyalandı.", "success");
+  }
+
   byId("prompt").oninput = renderPii;
+  byId("prompt").addEventListener("keydown", event => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      sendPrompt().catch(() => showMessage("Kapıya ulaşılamadı.", "error"));
+    }
+  });
   document.querySelectorAll(".examples button").forEach(button => {
     button.onclick = () => {
       byId("prompt").value = button.dataset.prompt;
@@ -280,11 +306,13 @@
     };
   });
   byId("send").onclick = () => sendPrompt().catch(() => showMessage("Kapıya ulaşılamadı.", "error"));
+  byId("copyAnswer").onclick = () => copyAnswer().catch(() => showMessage("Kopyalanamadı.", "error"));
   byId("refreshAudit").onclick = loadAudit;
   byId("refreshBudget").onclick = loadBudget;
   renderPii();
   loadAudit();
   loadBudget();
+  loadRoutes();
 </script>
 </body>
 </html>
