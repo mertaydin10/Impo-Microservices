@@ -154,6 +154,20 @@ public class EventStoreTests
     }
 
     [Fact]
+    public void MatchSummary_FinishedMatch_ShowsFinishedStatus()
+    {
+        var store = new EventStore();
+        store.SetTeams("match-1", "Ajax", "Inter");
+        store.Append("match-1", "goal", """{"side":"away","player":"Lautaro"}""", 9 * 60);
+        store.Append("match-1", "fulltime", """{"note":"Bitti"}""", 90 * 60);
+
+        var summary = MatchSummary.Build(store, "match-1");
+
+        Assert.Contains("Ajax 0-1 Inter", summary);
+        Assert.Contains("Durum: Bitti", summary);
+    }
+
+    [Fact]
     public void MatchEventView_RedCard_UsesReadableLabel()
     {
         var view = MatchEventView.From(new MatchEvent(

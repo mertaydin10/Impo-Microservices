@@ -121,6 +121,10 @@
     .quick .wide { grid-column: 1 / -1; }
 
     .feed { margin-top: 20px; overflow: hidden; }
+    .feed-tools { padding: 0 18px 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .feed-tools button { height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 12px; font-weight: 700; }
+    .feed-tools button.on { background: var(--green-soft); color: var(--green); border-color: #9bc6ad; }
+    .kbd-hint { margin: 0; padding: 0 18px 10px; color: var(--muted); font-size: 11px; }
     .event-list { padding: 8px 18px 18px; max-height: 450px; overflow: auto; }
     .event {
       display: grid;
@@ -227,7 +231,10 @@
       <section class="card score-card">
         <div class="score-meta">
           <span id="matchCode">Maç seçilmedi</span>
-          <button type="button" id="copySummary" class="ghost-btn">Özeti kopyala</button>
+          <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+            <button type="button" id="copySummary" class="ghost-btn">Özeti kopyala</button>
+            <button type="button" id="downloadSummary" class="ghost-btn">.txt indir</button>
+          </div>
           <span id="matchState" class="live-pill">CANLI</span>
         </div>
         <div class="scoreboard">
@@ -259,6 +266,13 @@
 
       <section class="card feed">
         <div class="card-head"><h2 class="card-title">Olay akışı</h2><span id="eventCount">0 olay</span></div>
+        <div class="feed-tools">
+          <button type="button" data-event-filter="all" class="on">Tümü</button>
+          <button type="button" data-event-filter="goal">Gol</button>
+          <button type="button" data-event-filter="card">Kart</button>
+          <button type="button" data-event-filter="sub">Değişiklik</button>
+        </div>
+        <p class="kbd-hint">Kısayollar: 1 ev gol · 2 dep gol · Z geri al · F maçı bitir</p>
         <div id="eventList" class="event-list"></div>
       </section>
     </main>
@@ -309,7 +323,7 @@
         </div>
         <button class="primary" type="submit">Olayı kaydet</button>
         <button id="clearMatch" class="danger-link" type="button">Bu maçın verilerini sil</button>
-        <div class="hint">Kayıtlı ve bitmiş maçlar salt okunurdur. Yalnızca yeni oluşturduğunuz maça, “Maç bitti” olayını kaydedene kadar veri girebilirsiniz.</div>
+        <div class="hint">Bitmiş maçlar salt okunur. Yanlış “Maç bitti” için Z veya Son olayı geri al. Klavye: 1 / 2 gol, F bitir.</div>
       </form>
     </aside>
   </div>
@@ -352,6 +366,7 @@
     let events = [];
     let footballTeams = [];
     let matchFilter = "all";
+    let eventFilter = "all";
     const squadCache = new Map();
     const byId = id => document.getElementById(id);
     const connection = new signalR.HubConnectionBuilder().withUrl("/hub/match").withAutomaticReconnect().build();
@@ -446,10 +461,11 @@
     }
 
     function renderEvents() {
-      const visible = eventsAtReplay();
+      const visible = eventsAtReplay().filter(event =>
+        eventFilter === "all" || event.type === eventFilter);
       byId("eventCount").textContent = `${visible.length} / ${events.length} olay`;
       if (!visible.length) {
-        byId("eventList").innerHTML = '<div class="empty">Bu dakikaya kadar olay yok. Yeni maç oluşturup gol, kart veya değişiklik ekleyin.</div>';
+        byId("eventList").innerHTML = '<div class="empty">Bu süzgeçte olay yok. Filtreyi değiştirin veya yeni olay ekleyin.</div>';
         renderStats();
         return;
       }
@@ -495,8 +511,13 @@
       const response = await fetch("/api/matches");
       matches = await response.json();
       if (!currentMatchId) {
+        const fromQuery = new URLSearchParams(location.search).get("match");
         const live = matches.find(match => !match.isFinished);
-        currentMatchId = preferredId || live?.id || matches[0]?.id || "";
+        currentMatchId = preferredId ||
+          (fromQuery && matches.some(m => m.id === fromQuery) ? fromQuery : null) ||
+          live?.id ||
+          matches[0]?.id ||
+          "";
       }
       renderMatchList();
       if (currentMatchId) await loadMatch();
@@ -568,6 +589,9 @@
 
     async function selectMatch(matchId) {
       currentMatchId = matchId;
+      const url = new URL(location.href);
+      url.searchParams.set("match", matchId);
+      history.replaceState(null, "", url);
       if (connection.state === signalR.HubConnectionState.Connected) {
         await connection.invoke("JoinMatch", currentMatchId);
       }
@@ -694,6 +718,20 @@
       showMessage("Maç özeti panoya kopyalandı.", "success");
     }
 
+    async function downloadSummary() {
+      if (!currentMatchId) return;
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/summary`);
+      if (!response.ok) return showMessage("Özet alınamadı.", "error");
+      const text = await response.text();
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${currentMatchId}-ozet.txt`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      showMessage("Özet indirildi.", "success");
+    }
+
     byId("eventType").onchange = updateForm;
     byId("side").onchange = loadCurrentSquad;
     byId("replay").oninput = event => loadSnapshot(Number(event.target.value));
@@ -754,11 +792,28 @@
         renderMatchList();
       };
     });
+    document.querySelectorAll("[data-event-filter]").forEach(button => {
+      button.onclick = () => {
+        eventFilter = button.dataset.eventFilter;
+        document.querySelectorAll("[data-event-filter]").forEach(item => item.classList.toggle("on", item === button));
+        renderEvents();
+      };
+    });
     byId("quickHomeGoal").onclick = () => postQuickGoal("home");
     byId("quickAwayGoal").onclick = () => postQuickGoal("away");
     byId("undoLast").onclick = undoLast;
     byId("finishMatch").onclick = finishMatch;
     byId("copySummary").onclick = copySummary;
+    byId("downloadSummary").onclick = downloadSummary;
+
+    document.addEventListener("keydown", event => {
+      const tag = (event.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "select" || tag === "textarea" || event.target.isContentEditable) return;
+      if (event.key === "1") { event.preventDefault(); postQuickGoal("home"); }
+      else if (event.key === "2") { event.preventDefault(); postQuickGoal("away"); }
+      else if (event.key === "z" || event.key === "Z") { event.preventDefault(); undoLast(); }
+      else if (event.key === "f" || event.key === "F") { event.preventDefault(); finishMatch(); }
+    });
     byId("cancelNewMatch").onclick = () => byId("newMatchDialog").close();
     byId("newMatchForm").onsubmit = async event => {
       event.preventDefault();
