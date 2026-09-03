@@ -71,6 +71,45 @@ public sealed class LocalStore
         cmd.ExecuteNonQuery();
     }
 
+    public HashSet<Guid> GetFavorites()
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT v FROM meta WHERE k = 'favorites'";
+        if (cmd.ExecuteScalar() is not string raw || string.IsNullOrWhiteSpace(raw))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<Guid>>(raw)?.ToHashSet() ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    public void SetFavorite(Guid id, bool favorite)
+    {
+        var favorites = GetFavorites();
+        if (favorite)
+        {
+            favorites.Add(id);
+        }
+        else
+        {
+            favorites.Remove(id);
+        }
+
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "INSERT INTO meta(k,v) VALUES ('favorites', $v) ON CONFLICT(k) DO UPDATE SET v = $v";
+        cmd.Parameters.AddWithValue("$v", JsonSerializer.Serialize(favorites.ToList()));
+        cmd.ExecuteNonQuery();
+    }
+
     public void SeedIfEmpty()
     {
         if (All().Count > 0)

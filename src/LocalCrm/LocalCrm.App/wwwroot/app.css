@@ -45,6 +45,9 @@ button { cursor: pointer; }
   height: 42px; padding: 0 14px; border: 0; border-radius: 9px; background: var(--accent); color: #fff; font-weight: 700;
 }
 .toolbar .ghost { background: #fff; color: var(--text); border: 1px solid var(--line); }
+.toolbar .ghost.on { background: #e8f1fc; color: #1849a9; border-color: #b6d0f5; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+.header-actions .ghost { height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); font-weight: 700; font-size: 12px; }
 .count { color: var(--muted); font-size: 13px; }
 
 .grid { display: grid; grid-template-columns: 320px 1fr; gap: 18px; }

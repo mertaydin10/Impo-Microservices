@@ -29,7 +29,9 @@
             <option value="name">Ada göre</option>
             <option value="company">Şirkete göre</option>
             <option value="recent">Son güncelleme</option>
+            <option value="favorites">Favoriler üstte</option>
         </select>
+        <button type="button" class="ghost @(_favoritesOnly ? "on" : null)" @onclick="ToggleFavoritesOnly">★ Favoriler</button>
         <button type="button" @onclick="SaveNew">+ Yeni kişi</button>
         <button type="button" class="ghost" @onclick="SyncNow">Bulut ile senkron</button>
         <button type="button" class="ghost" @onclick="ExportCsv">CSV indir</button>
@@ -61,7 +63,7 @@
                 @foreach (var c in Visible)
                 {
                     <button type="button" class="card @(c.Id == _selected?.Id ? "on" : null)" @onclick="() => Select(c)">
-                        <strong>@(string.IsNullOrWhiteSpace(c.Name.Value) ? "(isimsiz)" : c.Name.Value)</strong>
+                        <strong>@(_favorites.Contains(c.Id) ? "★ " : "")@(string.IsNullOrWhiteSpace(c.Name.Value) ? "(isimsiz)" : c.Name.Value)</strong>
                         <span>@(string.IsNullOrWhiteSpace(c.Company.Value) ? "Şirket yok" : c.Company.Value)</span>
                         <span>@(string.IsNullOrWhiteSpace(c.Email.Value) ? c.Phone.Value : c.Email.Value)</span>
                     </button>
@@ -78,7 +80,10 @@
             {
                 <header>
                     <h2>Kişi kartı @(IsDirty ? "· kaydedilmedi" : "")</h2>
-                    <button type="button" class="danger" @onclick="DeleteSelected">Sil</button>
+                    <div class="header-actions">
+                        <button type="button" class="ghost" @onclick="ToggleFavorite">@(_favorites.Contains(_selected.Id) ? "★ Favoride" : "☆ Favoriye ekle")</button>
+                        <button type="button" class="danger" @onclick="DeleteSelected">Sil</button>
+                    </div>
                 </header>
                 <label>Ad
                     <input @bind="_name" @bind:event="oninput" />
@@ -122,10 +127,13 @@
 
 @code {
     List<ContactRecord> _list = [];
+    HashSet<Guid> _favorites = [];
     ContactRecord? _selected;
-    string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "", _statusKind = "", _q = "", _sort = "name", _companyFilter = "";
+    string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "", _statusKind = "", _q = "", _sort = "favorites", _companyFilter = "";
+    bool _favoritesOnly;
 
     void ClearCompanyFilter() => _companyFilter = "";
+    void ToggleFavoritesOnly() => _favoritesOnly = !_favoritesOnly;
 
     IEnumerable<string> Companies =>
         _list.Select(c => c.Company.Value)
@@ -155,18 +163,26 @@
             {
                 items = items.Where(c => c.Company.Value.Equals(_companyFilter, StringComparison.OrdinalIgnoreCase));
             }
-            return _sort switch
+            if (_favoritesOnly)
+            {
+                items = items.Where(c => _favorites.Contains(c.Id));
+            }
+
+            items = _sort switch
             {
                 "company" => items.OrderBy(c => c.Company.Value).ThenBy(c => c.Name.Value),
                 "recent" => items.OrderByDescending(LastTouch),
+                "favorites" => items.OrderByDescending(c => _favorites.Contains(c.Id)).ThenBy(c => c.Name.Value),
                 _ => items.OrderBy(c => c.Name.Value)
             };
+            return items;
         }
     }
 
     protected override void OnInitialized()
     {
         _list = Store.All().ToList();
+        _favorites = Store.GetFavorites();
         if (_list.Count > 0)
         {
             ApplySelection(_list[0]);
@@ -220,6 +236,15 @@
         Flash("Yeni kişi yerelde oluşturuldu. Adı düzenleyip kaydedin.", "ok");
     }
 
+    void ToggleFavorite()
+    {
+        if (_selected is null) return;
+        var next = !_favorites.Contains(_selected.Id);
+        Store.SetFavorite(_selected.Id, next);
+        _favorites = Store.GetFavorites();
+        Flash(next ? "Favorilere eklendi." : "Favorilerden çıkarıldı.", "ok");
+    }
+
     void Persist()
     {
         if (_selected is null) return;
@@ -265,6 +290,11 @@
         if (!ok) return;
         _selected.DeletedAt = DateTimeOffset.UtcNow;
         Store.Save(_selected);
+        if (_favorites.Contains(_selected.Id))
+        {
+            Store.SetFavorite(_selected.Id, false);
+            _favorites = Store.GetFavorites();
+        }
         _list = Store.All().ToList();
         _selected = _list.FirstOrDefault();
         if (_selected is not null)
