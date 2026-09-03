@@ -111,6 +111,7 @@
             </select>
           </div>
         </div>
+        <p class="hint" id="routeHint" style="margin-top:-6px">Seçilen model kapıda company-strong / company-fast’e çevrilir.</p>
         <div class="field">
           <label for="prompt">Prompt</label>
           <textarea id="prompt">Müşteri Ali, e-posta ali@firma.com kart 4111 1111 1111 1111 ile aradı. Tel 05321234567.</textarea>
@@ -150,7 +151,12 @@
       <section class="card">
         <div class="card-head">
           <h2 class="card-title">Denetim kaydı</h2>
-          <button id="refreshAudit" class="ghost" type="button">Yenile</button>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select id="auditFilter" style="width:auto;padding:6px 8px;font-size:12px">
+              <option value="">Tüm anahtarlar</option>
+            </select>
+            <button id="refreshAudit" class="ghost" type="button">Yenile</button>
+          </div>
         </div>
         <div id="auditList" class="body"></div>
       </section>
@@ -158,6 +164,9 @@
   </main>
 <script>
   const byId = id => document.getElementById(id);
+  const STORAGE_KEY = "impo.gateway.settings";
+  let routesCache = {};
+  let auditRows = [];
   const piiRules = [
     { label: "E-posta", re: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i },
     { label: "Kart", re: /\b(?:\d[ -]*?){13,19}\b/ },
@@ -165,6 +174,28 @@
     { label: "IP", re: /\b(?:\d{1,3}\.){3}\d{1,3}\b/ },
     { label: "Parola / anahtar", re: /(password|pwd|secret|token|api[_-]?key)\s*[:=]/i }
   ];
+
+  function loadSettings() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+      if (saved.key) byId("key").value = saved.key;
+      if (saved.model) byId("model").value = saved.model;
+    } catch { /* ignore */ }
+  }
+
+  function saveSettings() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      key: byId("key").value,
+      model: byId("model").value
+    }));
+  }
+
+  function updateRouteHint() {
+    const requested = byId("model").value;
+    const routed = routesCache[requested] || "company-fast";
+    byId("routeHint").textContent = `${requested} → ${routed}`;
+    byId("requestedModel").textContent = requested;
+  }
 
   function showMessage(text, kind) {
     byId("message").textContent = text;
@@ -195,6 +226,7 @@
   }
 
   async function sendPrompt() {
+    saveSettings();
     byId("send").disabled = true;
     byId("send").textContent = "Gönderiliyor…";
     byId("requestedModel").textContent = byId("model").value;
@@ -231,8 +263,9 @@
     return date.toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
   }
 
-  async function loadAudit() {
-    const rows = await (await fetch("/admin/audit")).json();
+  function renderAudit() {
+    const filter = byId("auditFilter").value;
+    const rows = filter ? auditRows.filter(row => row.key === filter) : auditRows;
     if (!rows.length) {
       byId("auditList").innerHTML = '<div class="empty">Henüz kayıt yok.</div>';
       return;
@@ -246,6 +279,16 @@
         </div>
         <span>${row.tokens} tok</span>
       </article>`).join("");
+  }
+
+  async function loadAudit() {
+    auditRows = await (await fetch("/admin/audit")).json();
+    const keys = [...new Set(auditRows.map(row => row.key))].sort();
+    const current = byId("auditFilter").value;
+    byId("auditFilter").innerHTML = '<option value="">Tüm anahtarlar</option>' +
+      keys.map(key => `<option value="${key}">${key}</option>`).join("");
+    if (keys.includes(current)) byId("auditFilter").value = current;
+    renderAudit();
   }
 
   async function loadBudget() {
@@ -278,11 +321,12 @@
   }
 
   async function loadRoutes() {
-    const routes = await (await fetch("/admin/routes")).json();
-    const keys = Object.keys(routes);
+    routesCache = await (await fetch("/admin/routes")).json();
+    const keys = Object.keys(routesCache);
     byId("routeList").innerHTML = keys.map(key =>
-      `<div class="budget-top" style="margin-bottom:8px"><strong>${key}</strong><span>${routes[key]}</span></div>`
+      `<div class="budget-top" style="margin-bottom:8px"><strong>${key}</strong><span>${routesCache[key]}</span></div>`
     ).join("") || '<div class="empty">Rota yok.</div>';
+    updateRouteHint();
   }
 
   async function copyAnswer() {
@@ -292,7 +336,11 @@
     showMessage("Yanıt panoya kopyalandı.", "success");
   }
 
+  loadSettings();
   byId("prompt").oninput = renderPii;
+  byId("key").onchange = saveSettings;
+  byId("model").onchange = () => { saveSettings(); updateRouteHint(); };
+  byId("auditFilter").onchange = renderAudit;
   byId("prompt").addEventListener("keydown", event => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
