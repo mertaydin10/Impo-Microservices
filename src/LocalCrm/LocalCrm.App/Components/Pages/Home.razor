@@ -14,7 +14,13 @@
         <a class="on" href="/">CRM</a>
         <a href="http://localhost:5047">Kapı</a>
     </nav>
-    <div class="device">Bu cihaz: <code>@Store.DeviceId</code></div>
+    <div class="device">
+        Bu cihaz: <code>@Store.DeviceId</code>
+        @if (_lastSyncAt is not null)
+        {
+            <span> · Son senkron @_lastSyncAt.Value.LocalDateTime.ToString("dd MMM HH:mm")</span>
+        }
+    </div>
 </div>
 
 <div class="page">
@@ -82,6 +88,7 @@
                     <h2>Kişi kartı @(IsDirty ? "· kaydedilmedi" : "")</h2>
                     <div class="header-actions">
                         <button type="button" class="ghost" @onclick="ToggleFavorite">@(_favorites.Contains(_selected.Id) ? "★ Favoride" : "☆ Favoriye ekle")</button>
+                        <button type="button" class="ghost" @onclick="CopyContact">Kopyala</button>
                         <button type="button" class="danger" @onclick="DeleteSelected">Sil</button>
                     </div>
                 </header>
@@ -129,6 +136,7 @@
     List<ContactRecord> _list = [];
     HashSet<Guid> _favorites = [];
     ContactRecord? _selected;
+    DateTimeOffset? _lastSyncAt;
     string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "", _statusKind = "", _q = "", _sort = "favorites", _companyFilter = "";
     bool _favoritesOnly;
 
@@ -183,6 +191,7 @@
     {
         _list = Store.All().ToList();
         _favorites = Store.GetFavorites();
+        _lastSyncAt = Store.GetLastSyncAt();
         if (_list.Count > 0)
         {
             ApplySelection(_list[0]);
@@ -245,6 +254,21 @@
         Flash(next ? "Favorilere eklendi." : "Favorilerden çıkarıldı.", "ok");
     }
 
+    async Task CopyContact()
+    {
+        if (_selected is null) return;
+        var text = string.Join("\n", new[]
+        {
+            _name,
+            string.IsNullOrWhiteSpace(_company) ? null : _company,
+            string.IsNullOrWhiteSpace(_email) ? null : _email,
+            string.IsNullOrWhiteSpace(_phone) ? null : _phone,
+            string.IsNullOrWhiteSpace(_notes) ? null : _notes
+        }.Where(line => !string.IsNullOrWhiteSpace(line)));
+        await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        Flash("Kişi bilgisi panoya kopyalandı.", "ok");
+    }
+
     void Persist()
     {
         if (_selected is null) return;
@@ -259,13 +283,15 @@
         _selected.Notes = StampField(_selected.Notes, _notes);
         Store.Save(_selected);
         _list = Store.All().ToList();
-        var duplicate = !string.IsNullOrWhiteSpace(_email) &&
+        var duplicateEmail = !string.IsNullOrWhiteSpace(_email) &&
             _list.Any(c => c.Id != _selected.Id && c.Email.Value.Equals(_email, StringComparison.OrdinalIgnoreCase));
+        var duplicatePhone = !string.IsNullOrWhiteSpace(_phone) &&
+            _list.Any(c => c.Id != _selected.Id && c.Phone.Value.Equals(_phone, StringComparison.OrdinalIgnoreCase));
         Flash(
-            duplicate
-                ? "Kaydedildi. Bu e-posta başka bir kişide de var."
+            duplicateEmail || duplicatePhone
+                ? $"Kaydedildi. {(duplicateEmail ? "E-posta " : "")}{(duplicateEmail && duplicatePhone ? "ve " : "")}{(duplicatePhone ? "telefon " : "")}başka kişide de var."
                 : "Yerelde kaydedildi. ⌘S / Ctrl+S ile de kaydedebilirsiniz.",
-            duplicate ? "error" : "ok");
+            duplicateEmail || duplicatePhone ? "error" : "ok");
     }
 
     async Task ExportCsv()
@@ -313,6 +339,8 @@
         try
         {
             Flash(await Sync.SyncAsync(), "ok");
+            Store.SetLastSyncAt(DateTimeOffset.UtcNow);
+            _lastSyncAt = Store.GetLastSyncAt();
             _list = Store.All().ToList();
             if (_selected is not null)
             {

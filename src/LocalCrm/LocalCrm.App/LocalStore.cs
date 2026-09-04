@@ -110,6 +110,23 @@ public sealed class LocalStore
         cmd.ExecuteNonQuery();
     }
 
+    public DateTimeOffset? GetLastSyncAt()
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT v FROM meta WHERE k = 'last_sync_at'";
+        return cmd.ExecuteScalar() is string raw && DateTimeOffset.TryParse(raw, out var at) ? at : null;
+    }
+
+    public void SetLastSyncAt(DateTimeOffset at)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "INSERT INTO meta(k,v) VALUES ('last_sync_at', $v) ON CONFLICT(k) DO UPDATE SET v = $v";
+        cmd.Parameters.AddWithValue("$v", at.ToString("O"));
+        cmd.ExecuteNonQuery();
+    }
+
     public void SeedIfEmpty()
     {
         if (All().Count > 0)
