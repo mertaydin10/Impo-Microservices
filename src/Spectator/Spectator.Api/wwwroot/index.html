@@ -118,7 +118,9 @@
     .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); }
     .quick button { height: 38px; border: 1px solid var(--line); border-radius: 9px; background: #fff; font-weight: 700; font-size: 12px; }
     .quick .goal { background: var(--green-soft); color: var(--green); border-color: #9bc6ad; }
+    .quick .card-btn { background: #fff4ce; color: #93370d; border-color: #f5d67a; }
     .quick .wide { grid-column: 1 / -1; }
+    .metrics-chip { color: #c8d3cc; font-size: 12px; opacity: .9; }
 
     .feed { margin-top: 20px; overflow: hidden; }
     .feed-tools { padding: 0 18px 8px; display: flex; gap: 6px; flex-wrap: wrap; }
@@ -207,7 +209,10 @@
       <a href="http://localhost:5209">CRM</a>
       <a href="http://localhost:5047">Kapı</a>
     </nav>
-    <div id="connection" class="connection"><span class="connection-dot"></span><span id="connectionText">Bağlanıyor</span></div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <span id="metricsChip" class="metrics-chip">—</span>
+      <div id="connection" class="connection"><span class="connection-dot"></span><span id="connectionText">Bağlanıyor</span></div>
+    </div>
   </header>
 
   <div class="layout">
@@ -234,6 +239,7 @@
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
             <button type="button" id="copySummary" class="ghost-btn">Özeti kopyala</button>
             <button type="button" id="downloadSummary" class="ghost-btn">.txt indir</button>
+            <button type="button" id="copyLink" class="ghost-btn">Bağlantı</button>
           </div>
           <span id="matchState" class="live-pill">CANLI</span>
         </div>
@@ -259,6 +265,9 @@
         <div id="quickActions" class="quick">
           <button type="button" id="quickHomeGoal" class="goal">+ Gol ev</button>
           <button type="button" id="quickAwayGoal" class="goal">+ Gol dep</button>
+          <button type="button" id="quickHomeYellow" class="card-btn">Sarı ev</button>
+          <button type="button" id="quickAwayYellow" class="card-btn">Sarı dep</button>
+          <button type="button" id="halfTime" class="wide">İlk yarı bitti</button>
           <button type="button" id="undoLast" class="wide">Son olayı geri al</button>
           <button type="button" id="finishMatch" class="wide">Maçı bitir</button>
         </div>
@@ -272,7 +281,7 @@
           <button type="button" data-event-filter="card">Kart</button>
           <button type="button" data-event-filter="sub">Değişiklik</button>
         </div>
-        <p class="kbd-hint">Kısayollar: 1 ev gol · 2 dep gol · Z geri al · F maçı bitir</p>
+        <p class="kbd-hint">Kısayollar: 1/2 gol · Y/U sarı · H yarı · Z geri al · F bitir</p>
         <div id="eventList" class="event-list"></div>
       </section>
     </main>
@@ -323,7 +332,7 @@
         </div>
         <button class="primary" type="submit">Olayı kaydet</button>
         <button id="clearMatch" class="danger-link" type="button">Bu maçın verilerini sil</button>
-        <div class="hint">Bitmiş maçlar salt okunur. Yanlış “Maç bitti” için Z veya Son olayı geri al. Klavye: 1 / 2 gol, F bitir.</div>
+        <div class="hint">Bitmiş maçlar salt okunur. Yanlış “Maç bitti” için Z veya Son olayı geri al. Klavye: 1/2 gol, Y/U sarı, H yarı, F bitir.</div>
       </form>
     </aside>
   </div>
@@ -569,6 +578,9 @@
       });
       byId("quickHomeGoal").disabled = isFinished;
       byId("quickAwayGoal").disabled = isFinished;
+      byId("quickHomeYellow").disabled = isFinished;
+      byId("quickAwayYellow").disabled = isFinished;
+      byId("halfTime").disabled = isFinished;
       byId("finishMatch").disabled = isFinished;
       byId("undoLast").disabled = false;
       if (isFinished) {
@@ -636,6 +648,7 @@
       byId("player").value = byId("playerIn").value = byId("playerOut").value = byId("note").value = "";
       showMessage("Olay kaydedildi.", "success");
       await loadMatches(currentMatchId);
+      await refreshMetrics();
     };
 
     async function postQuickGoal(side) {
@@ -652,6 +665,40 @@
       }
       byId("minute").value = Math.min(130, minute + 1);
       showMessage("Gol kaydedildi.", "success");
+      await loadMatches(currentMatchId);
+    }
+
+    async function postQuickCard(side, cardKind = "yellow") {
+      if (!currentMatchId) return showMessage("Önce bir maç oluşturun.", "error");
+      const minute = Number(byId("minute").value || byId("replay").value || 0);
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "card", minute, side, cardKind })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        return showMessage(error.message || "Kart kaydedilemedi.", "error");
+      }
+      byId("minute").value = Math.min(130, minute + 1);
+      showMessage(cardKind === "red" ? "Kırmızı kart kaydedildi." : "Sarı kart kaydedildi.", "success");
+      await loadMatches(currentMatchId);
+    }
+
+    async function postHalfTime() {
+      if (!currentMatchId) return;
+      const minute = Math.max(45, Number(byId("minute").value || 45));
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "halftime", minute, note: "İlk yarı bitti" })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        return showMessage(error.message || "Yarı kaydedilemedi.", "error");
+      }
+      byId("minute").value = 46;
+      showMessage("İlk yarı kaydedildi.", "success");
       await loadMatches(currentMatchId);
     }
 
@@ -732,6 +779,24 @@
       showMessage("Özet indirildi.", "success");
     }
 
+    async function copyLink() {
+      if (!currentMatchId) return;
+      const url = new URL(location.href);
+      url.searchParams.set("match", currentMatchId);
+      await navigator.clipboard.writeText(url.toString());
+      showMessage("Maç bağlantısı kopyalandı.", "success");
+    }
+
+    async function refreshMetrics() {
+      try {
+        const metrics = await (await fetch("/api/metrics")).json();
+        byId("metricsChip").textContent =
+          `${metrics.activeMatches} maç · ${metrics.totalEvents} olay`;
+      } catch {
+        byId("metricsChip").textContent = "—";
+      }
+    }
+
     byId("eventType").onchange = updateForm;
     byId("side").onchange = loadCurrentSquad;
     byId("replay").oninput = event => loadSnapshot(Number(event.target.value));
@@ -801,16 +866,23 @@
     });
     byId("quickHomeGoal").onclick = () => postQuickGoal("home");
     byId("quickAwayGoal").onclick = () => postQuickGoal("away");
+    byId("quickHomeYellow").onclick = () => postQuickCard("home");
+    byId("quickAwayYellow").onclick = () => postQuickCard("away");
+    byId("halfTime").onclick = postHalfTime;
     byId("undoLast").onclick = undoLast;
     byId("finishMatch").onclick = finishMatch;
     byId("copySummary").onclick = copySummary;
     byId("downloadSummary").onclick = downloadSummary;
+    byId("copyLink").onclick = () => copyLink().catch(() => showMessage("Bağlantı kopyalanamadı.", "error"));
 
     document.addEventListener("keydown", event => {
       const tag = (event.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "select" || tag === "textarea" || event.target.isContentEditable) return;
       if (event.key === "1") { event.preventDefault(); postQuickGoal("home"); }
       else if (event.key === "2") { event.preventDefault(); postQuickGoal("away"); }
+      else if (event.key === "y" || event.key === "Y") { event.preventDefault(); postQuickCard("home"); }
+      else if (event.key === "u" || event.key === "U") { event.preventDefault(); postQuickCard("away"); }
+      else if (event.key === "h" || event.key === "H") { event.preventDefault(); postHalfTime(); }
       else if (event.key === "z" || event.key === "Z") { event.preventDefault(); undoLast(); }
       else if (event.key === "f" || event.key === "F") { event.preventDefault(); finishMatch(); }
     });
@@ -884,6 +956,8 @@
       byId("connectionText").textContent = "Canlı bağlantı";
       byId("connection").classList.add("live");
       await loadMatches();
+      await refreshMetrics();
+      setInterval(refreshMetrics, 15000);
       if (currentMatchId) await connection.invoke("JoinMatch", currentMatchId);
     }
 
