@@ -113,7 +113,7 @@
         </div>
         <p class="hint" id="routeHint" style="margin-top:-6px">Seçilen model kapıda company-strong / company-fast’e çevrilir.</p>
         <div class="field">
-          <label for="prompt">Prompt</label>
+          <label for="prompt">Prompt <span id="tokenEstimate" style="font-weight:400;color:var(--muted)">· ~0 token</span></label>
           <textarea id="prompt">Müşteri Ali, e-posta ali@firma.com kart 4111 1111 1111 1111 ile aradı. Tel 05321234567.</textarea>
         </div>
         <div class="field">
@@ -142,11 +142,19 @@
         </div>
         <div id="routeList" class="body"></div>
       </section>
+      <section class="card" style="margin-bottom:20px">
         <div class="card-head">
           <h2 class="card-title">Bütçe</h2>
           <button id="refreshBudget" class="ghost" type="button">Yenile</button>
         </div>
         <div id="budgetList" class="body"></div>
+      </section>
+      <section class="card" style="margin-bottom:20px">
+        <div class="card-head">
+          <h2 class="card-title">Son promptlar</h2>
+          <button id="clearHistory" class="ghost" type="button">Temizle</button>
+        </div>
+        <div id="historyList" class="body"></div>
       </section>
       <section class="card">
         <div class="card-head">
@@ -165,8 +173,10 @@
 <script>
   const byId = id => document.getElementById(id);
   const STORAGE_KEY = "impo.gateway.settings";
+  const HISTORY_KEY = "impo.gateway.history";
   let routesCache = {};
   let auditRows = [];
+  let historyRows = [];
   const piiRules = [
     { label: "E-posta", re: /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i },
     { label: "Kart", re: /\b(?:\d[ -]*?){13,19}\b/ },
@@ -216,13 +226,66 @@
       .replace(/(password|pwd|passwd|secret|token|api[_-]?key)\s*[:=]\s*["']?([^"'\s,}]+)/gi, "$1:[REDACTED]");
   }
 
+  function estimateTokens(text) {
+    const trimmed = (text || "").trim();
+    if (!trimmed) return 0;
+    return Math.max(1, Math.ceil(trimmed.length / 4));
+  }
+
   function renderPii() {
     const text = byId("prompt").value;
     const found = detectPii(text);
+    byId("tokenEstimate").textContent = `· ~${estimateTokens(text)} token`;
     byId("piiPills").innerHTML = found.length
       ? found.map(item => `<span class="pill warn">${item} maskelenecek</span>`).join("")
       : '<span class="pill">Hassas veri yok</span>';
     byId("maskedPreview").textContent = maskPreview(text) || "Prompt yazın.";
+  }
+
+  function loadHistory() {
+    try {
+      historyRows = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+      if (!Array.isArray(historyRows)) historyRows = [];
+    } catch {
+      historyRows = [];
+    }
+    renderHistory();
+  }
+
+  function saveHistoryEntry(prompt, model, ok) {
+    historyRows = [
+      { at: new Date().toISOString(), prompt, model, ok, tokens: estimateTokens(prompt) },
+      ...historyRows.filter(row => row.prompt !== prompt)
+    ].slice(0, 8);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(historyRows));
+    renderHistory();
+  }
+
+  function renderHistory() {
+    if (!historyRows.length) {
+      byId("historyList").innerHTML = '<div class="empty">Henüz yerel geçmiş yok.</div>';
+      return;
+    }
+    byId("historyList").innerHTML = historyRows.map((row, index) => `
+      <article class="row">
+        <time>${formatTime(row.at)}</time>
+        <div>
+          <strong>${row.model}</strong> · ~${row.tokens} tok ${row.ok ? "" : "· hata"}
+          <div class="preview">${(row.prompt || "").slice(0, 90)}</div>
+        </div>
+        <button class="ghost tiny" data-history="${index}" type="button">Yükle</button>
+      </article>`).join("");
+    document.querySelectorAll("[data-history]").forEach(button => {
+      button.onclick = () => {
+        const row = historyRows[Number(button.dataset.history)];
+        if (!row) return;
+        byId("prompt").value = row.prompt;
+        if (row.model) byId("model").value = row.model;
+        saveSettings();
+        updateRouteHint();
+        renderPii();
+      };
+    });
   }
 
   async function sendPrompt() {
@@ -245,12 +308,14 @@
           ? `Bütçe doldu. Kalan token: ${payload.remaining}`
           : (payload.error || "İstek reddedildi.");
         showMessage("İstek kapıdan geçemedi.", "error");
+        saveHistoryEntry(byId("prompt").value, byId("model").value, false);
         await loadBudget();
         return;
       }
       byId("routedModel").textContent = payload.model || "—";
       byId("answer").textContent = payload.choices?.[0]?.message?.content || "Yanıt alınamadı.";
       showMessage("İstek maskelenip yönlendirildi.", "success");
+      saveHistoryEntry(byId("prompt").value, byId("model").value, true);
       await Promise.all([loadAudit(), loadBudget()]);
     } finally {
       byId("send").disabled = false;
@@ -357,7 +422,14 @@
   byId("copyAnswer").onclick = () => copyAnswer().catch(() => showMessage("Kopyalanamadı.", "error"));
   byId("refreshAudit").onclick = loadAudit;
   byId("refreshBudget").onclick = loadBudget;
+  byId("clearHistory").onclick = () => {
+    historyRows = [];
+    localStorage.removeItem(HISTORY_KEY);
+    renderHistory();
+    showMessage("Yerel geçmiş temizlendi.", "success");
+  };
   renderPii();
+  loadHistory();
   loadAudit();
   loadBudget();
   loadRoutes();
