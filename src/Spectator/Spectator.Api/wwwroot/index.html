@@ -66,8 +66,9 @@
     .filters button.on { background: var(--green-soft); color: var(--green); border-color: #9bc6ad; }
     .match-list { padding: 8px; display: grid; gap: 5px; max-height: calc(100vh - 220px); overflow: auto; }
     .match-row {
+      position: relative;
       width: 100%;
-      padding: 12px;
+      padding: 12px 34px 12px 12px;
       border: 0;
       border-radius: 10px;
       text-align: left;
@@ -80,6 +81,11 @@
     .match-teams img { width: 18px; height: 18px; object-fit: contain; vertical-align: -3px; margin-right: 4px; }
     .match-score { margin-top: 5px; color: var(--muted); font-size: 12px; }
     .match-row.active .match-score { color: #347454; }
+    .match-row .pin {
+      position: absolute; top: 10px; right: 10px; border: 0; background: transparent;
+      color: #9aa39c; font-size: 14px; padding: 2px 4px; line-height: 1;
+    }
+    .match-row .pin.on { color: #b54708; }
 
     .new-match { padding: 7px 10px; border: 1px solid #9bc6ad; border-radius: 8px; background: var(--green-soft); color: var(--green); font-size: 12px; font-weight: 750; }
     .new-match:hover { background: var(--green-soft); }
@@ -227,6 +233,7 @@
           <button type="button" data-filter="all" class="on">Tümü</button>
           <button type="button" data-filter="live">Canlı</button>
           <button type="button" data-filter="done">Bitti</button>
+          <button type="button" data-filter="pinned">Sabit</button>
         </div>
       </div>
       <div id="matchList" class="match-list"></div>
@@ -239,6 +246,7 @@
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
             <button type="button" id="copySummary" class="ghost-btn">Özeti kopyala</button>
             <button type="button" id="downloadSummary" class="ghost-btn">.txt indir</button>
+            <button type="button" id="exportEvents" class="ghost-btn">JSON</button>
             <button type="button" id="copyLink" class="ghost-btn">Bağlantı</button>
           </div>
           <span id="matchState" class="live-pill">CANLI</span>
@@ -263,6 +271,7 @@
           <input id="replay" type="range" min="0" max="90" value="0">
         </div>
         <div id="quickActions" class="quick">
+          <button type="button" id="kickOff" class="wide">Maç başladı</button>
           <button type="button" id="quickHomeGoal" class="goal">+ Gol ev</button>
           <button type="button" id="quickAwayGoal" class="goal">+ Gol dep</button>
           <button type="button" id="quickHomeYellow" class="card-btn">Sarı ev</button>
@@ -281,7 +290,7 @@
           <button type="button" data-event-filter="card">Kart</button>
           <button type="button" data-event-filter="sub">Değişiklik</button>
         </div>
-        <p class="kbd-hint">Kısayollar: 1/2 gol · Y/U sarı · H yarı · Z geri al · F bitir</p>
+        <p class="kbd-hint">Kısayollar: K başladı · 1/2 gol · Y/U sarı · H yarı · Z geri al · F bitir · P sabitle</p>
         <div id="eventList" class="event-list"></div>
       </section>
     </main>
@@ -332,7 +341,7 @@
         </div>
         <button class="primary" type="submit">Olayı kaydet</button>
         <button id="clearMatch" class="danger-link" type="button">Bu maçın verilerini sil</button>
-        <div class="hint">Bitmiş maçlar salt okunur. Yanlış “Maç bitti” için Z veya Son olayı geri al. Klavye: 1/2 gol, Y/U sarı, H yarı, F bitir.</div>
+        <div class="hint">Bitmiş maçlar salt okunur. Yanlış “Maç bitti” için Z veya Son olayı geri al. Klavye: K başladı, 1/2 gol, Y/U sarı, H yarı, P sabitle, F bitir.</div>
       </form>
     </aside>
   </div>
@@ -376,11 +385,33 @@
     let footballTeams = [];
     let matchFilter = "all";
     let eventFilter = "all";
+    const PIN_KEY = "impo.spectator.pins";
+    let pinnedIds = loadPins();
     const squadCache = new Map();
     const byId = id => document.getElementById(id);
     const connection = new signalR.HubConnectionBuilder().withUrl("/hub/match").withAutomaticReconnect().build();
 
     const icons = { kickoff: "▶", goal: "⚽", card: "■", sub: "↔", halftime: "Ⅱ", fulltime: "■" };
+
+    function loadPins() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(PIN_KEY) || "[]");
+        return new Set(Array.isArray(raw) ? raw : []);
+      } catch {
+        return new Set();
+      }
+    }
+
+    function savePins() {
+      localStorage.setItem(PIN_KEY, JSON.stringify([...pinnedIds]));
+    }
+
+    function togglePin(matchId) {
+      if (pinnedIds.has(matchId)) pinnedIds.delete(matchId);
+      else pinnedIds.add(matchId);
+      savePins();
+      renderMatchList();
+    }
 
     function teamLabel(side) {
       const match = matches.find(item => item.id === currentMatchId);
@@ -493,9 +524,17 @@
     function visibleMatches() {
       const query = (byId("matchSearch").value || "").trim().toLowerCase();
       return [...matches]
-        .filter(match => matchFilter === "all" || (matchFilter === "live" ? !match.isFinished : match.isFinished))
+        .filter(match => {
+          if (matchFilter === "live") return !match.isFinished;
+          if (matchFilter === "done") return match.isFinished;
+          if (matchFilter === "pinned") return pinnedIds.has(match.id);
+          return true;
+        })
         .filter(match => !query || `${match.homeTeam} ${match.awayTeam} ${match.id}`.toLowerCase().includes(query))
-        .sort((a, b) => Number(a.isFinished) - Number(b.isFinished) || b.events - a.events);
+        .sort((a, b) =>
+          Number(pinnedIds.has(b.id)) - Number(pinnedIds.has(a.id)) ||
+          Number(a.isFinished) - Number(b.isFinished) ||
+          b.events - a.events);
     }
 
     function renderMatchList() {
@@ -505,15 +544,29 @@
         byId("matchList").innerHTML = '<div class="empty">Eşleşen maç yok. Filtreyi değiştirin veya yeni maç ekleyin.</div>';
         return;
       }
-      byId("matchList").innerHTML = list.map(match => `
-        <button class="match-row ${match.id === currentMatchId ? "active" : ""}" data-id="${match.id}">
-          <div class="match-teams">
-            <span>${match.teams?.homeLogo ? `<img src="${match.teams.homeLogo}" alt="">` : ""}${match.homeTeam}</span>
-            <strong>${match.home} - ${match.away}</strong>
-          </div>
-          <div class="match-score">${match.awayTeam} · ${match.isFinished ? "Bitti" : "Canlı"} · ${match.events} olay</div>
-        </button>`).join("");
-      document.querySelectorAll(".match-row").forEach(button => button.onclick = () => selectMatch(button.dataset.id));
+      byId("matchList").innerHTML = list.map(match => {
+        const pinned = pinnedIds.has(match.id);
+        return `
+        <div class="match-row ${match.id === currentMatchId ? "active" : ""}" data-id="${match.id}">
+          <button type="button" class="pin ${pinned ? "on" : ""}" data-pin="${match.id}" title="Sabitle">${pinned ? "★" : "☆"}</button>
+          <button type="button" class="match-select" data-select="${match.id}" style="all:unset;display:block;cursor:pointer;width:100%">
+            <div class="match-teams">
+              <span>${match.teams?.homeLogo ? `<img src="${match.teams.homeLogo}" alt="">` : ""}${match.homeTeam}</span>
+              <strong>${match.home} - ${match.away}</strong>
+            </div>
+            <div class="match-score">${match.awayTeam} · ${match.isFinished ? "Bitti" : "Canlı"} · ${match.events} olay${pinned ? " · Sabit" : ""}</div>
+          </button>
+        </div>`;
+      }).join("");
+      document.querySelectorAll("[data-select]").forEach(button => {
+        button.onclick = () => selectMatch(button.dataset.select);
+      });
+      document.querySelectorAll("[data-pin]").forEach(button => {
+        button.onclick = event => {
+          event.stopPropagation();
+          togglePin(button.dataset.pin);
+        };
+      });
     }
 
     async function loadMatches(preferredId) {
@@ -566,6 +619,8 @@
     function updateQuickLabels(match) {
       byId("quickHomeGoal").textContent = `+ Gol ${match.homeTeam}`;
       byId("quickAwayGoal").textContent = `+ Gol ${match.awayTeam}`;
+      byId("quickHomeYellow").textContent = `Sarı ${match.homeTeam}`;
+      byId("quickAwayYellow").textContent = `Sarı ${match.awayTeam}`;
     }
 
     function setMatchFinished(isFinished) {
@@ -576,6 +631,7 @@
       byId("eventForm").querySelectorAll("input, select, button[type='submit']").forEach(control => {
         control.disabled = isFinished;
       });
+      byId("kickOff").disabled = isFinished;
       byId("quickHomeGoal").disabled = isFinished;
       byId("quickAwayGoal").disabled = isFinished;
       byId("quickHomeYellow").disabled = isFinished;
@@ -650,6 +706,22 @@
       await loadMatches(currentMatchId);
       await refreshMetrics();
     };
+
+    async function postKickOff() {
+      if (!currentMatchId) return showMessage("Önce bir maç oluşturun.", "error");
+      const response = await fetch(`/api/matches/${encodeURIComponent(currentMatchId)}/events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "kickoff", minute: 0, note: "Maç başladı" })
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        return showMessage(error.message || "Başlangıç kaydedilemedi.", "error");
+      }
+      byId("minute").value = 1;
+      showMessage("Maç başladı kaydedildi.", "success");
+      await loadMatches(currentMatchId);
+    }
 
     async function postQuickGoal(side) {
       if (!currentMatchId) return showMessage("Önce bir maç oluşturun.", "error");
@@ -779,6 +851,22 @@
       showMessage("Özet indirildi.", "success");
     }
 
+    async function exportEvents() {
+      if (!currentMatchId) return;
+      const payload = {
+        matchId: currentMatchId,
+        exportedAt: new Date().toISOString(),
+        events
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${currentMatchId}-events.json`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      showMessage("Olaylar JSON olarak indirildi.", "success");
+    }
+
     async function copyLink() {
       if (!currentMatchId) return;
       const url = new URL(location.href);
@@ -864,6 +952,7 @@
         renderEvents();
       };
     });
+    byId("kickOff").onclick = postKickOff;
     byId("quickHomeGoal").onclick = () => postQuickGoal("home");
     byId("quickAwayGoal").onclick = () => postQuickGoal("away");
     byId("quickHomeYellow").onclick = () => postQuickCard("home");
@@ -873,18 +962,27 @@
     byId("finishMatch").onclick = finishMatch;
     byId("copySummary").onclick = copySummary;
     byId("downloadSummary").onclick = downloadSummary;
+    byId("exportEvents").onclick = exportEvents;
     byId("copyLink").onclick = () => copyLink().catch(() => showMessage("Bağlantı kopyalanamadı.", "error"));
 
     document.addEventListener("keydown", event => {
       const tag = (event.target.tagName || "").toLowerCase();
       if (tag === "input" || tag === "select" || tag === "textarea" || event.target.isContentEditable) return;
-      if (event.key === "1") { event.preventDefault(); postQuickGoal("home"); }
+      if (event.key === "k" || event.key === "K") { event.preventDefault(); postKickOff(); }
+      else if (event.key === "1") { event.preventDefault(); postQuickGoal("home"); }
       else if (event.key === "2") { event.preventDefault(); postQuickGoal("away"); }
       else if (event.key === "y" || event.key === "Y") { event.preventDefault(); postQuickCard("home"); }
       else if (event.key === "u" || event.key === "U") { event.preventDefault(); postQuickCard("away"); }
       else if (event.key === "h" || event.key === "H") { event.preventDefault(); postHalfTime(); }
       else if (event.key === "z" || event.key === "Z") { event.preventDefault(); undoLast(); }
       else if (event.key === "f" || event.key === "F") { event.preventDefault(); finishMatch(); }
+      else if (event.key === "p" || event.key === "P") {
+        event.preventDefault();
+        if (currentMatchId) {
+          togglePin(currentMatchId);
+          showMessage(pinnedIds.has(currentMatchId) ? "Maç sabitlendi." : "Sabit kaldırıldı.", "success");
+        }
+      }
     });
     byId("cancelNewMatch").onclick = () => byId("newMatchDialog").close();
     byId("newMatchForm").onsubmit = async event => {
