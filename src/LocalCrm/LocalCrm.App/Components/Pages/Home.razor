@@ -30,7 +30,7 @@
     }
 
     <div class="toolbar">
-        <input placeholder="Ad, şirket, e-posta veya telefon ara…" @bind="_q" @bind:event="oninput" />
+        <input id="crmSearch" placeholder="Ad, şirket, e-posta, telefon veya not ara…" @bind="_q" @bind:event="oninput" />
         <select @bind="_sort">
             <option value="name">Ada göre</option>
             <option value="company">Şirkete göre</option>
@@ -39,9 +39,10 @@
         </select>
         <button type="button" class="ghost @(_favoritesOnly ? "on" : null)" @onclick="ToggleFavoritesOnly">★ Favoriler</button>
         <button type="button" @onclick="SaveNew">+ Yeni kişi</button>
+        <button type="button" class="ghost" @onclick="DuplicateSelected" disabled="@(_selected is null)">Kopyasını oluştur</button>
         <button type="button" class="ghost" @onclick="SyncNow">Bulut ile senkron</button>
         <button type="button" class="ghost" @onclick="ExportCsv">CSV indir</button>
-        <span class="count">@Visible.Count() kişi</span>
+        <span class="count">@Visible.Count() kişi · N yeni · / ara</span>
     </div>
 
     @if (Companies.Any())
@@ -165,7 +166,7 @@
             var items = string.IsNullOrWhiteSpace(_q)
                 ? _list.AsEnumerable()
                 : _list.Where(c =>
-                    (c.Name.Value + " " + c.Email.Value + " " + c.Company.Value + " " + c.Phone.Value)
+                    (c.Name.Value + " " + c.Email.Value + " " + c.Company.Value + " " + c.Phone.Value + " " + c.Notes.Value)
                         .Contains(_q, StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrWhiteSpace(_companyFilter))
             {
@@ -243,6 +244,25 @@
         _name = c.Name.Value;
         _email = _phone = _company = _notes = "";
         Flash("Yeni kişi yerelde oluşturuldu. Adı düzenleyip kaydedin.", "ok");
+    }
+
+    void DuplicateSelected()
+    {
+        if (_selected is null) return;
+        var device = Store.DeviceId;
+        var copy = new ContactRecord
+        {
+            Id = Guid.NewGuid(),
+            Name = FieldMerger.Touch(string.IsNullOrWhiteSpace(_name) ? "Kişi kopyası" : $"{_name} (kopya)", device),
+            Email = FieldMerger.Touch(_email, device),
+            Phone = FieldMerger.Touch(_phone, device),
+            Company = FieldMerger.Touch(_company, device),
+            Notes = FieldMerger.Touch(_notes, device)
+        };
+        Store.Save(copy);
+        _list = Store.All().ToList();
+        ApplySelection(copy);
+        Flash("Kişinin kopyası oluşturuldu. Düzenleyip kaydedin.", "ok");
     }
 
     void ToggleFavorite()
