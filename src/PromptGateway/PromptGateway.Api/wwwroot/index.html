@@ -141,6 +141,22 @@
           <h2 class="card-title">Model yönlendirme</h2>
         </div>
         <div id="routeList" class="body"></div>
+        <div class="body" style="padding-top:0;border-top:1px solid var(--line)">
+          <div class="two">
+            <div class="field" style="margin-bottom:0">
+              <label for="routeAlias">Alias</label>
+              <input id="routeAlias" placeholder="gpt-5">
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <label for="routeTarget">Hedef</label>
+              <select id="routeTarget">
+                <option value="company-strong">company-strong</option>
+                <option value="company-fast">company-fast</option>
+              </select>
+            </div>
+          </div>
+          <button id="addRoute" class="ghost" type="button" style="margin-top:10px;width:100%">Rota ekle / güncelle</button>
+        </div>
       </section>
       <section class="card" style="margin-bottom:20px">
         <div class="card-head">
@@ -163,6 +179,7 @@
             <select id="auditFilter" style="width:auto;padding:6px 8px;font-size:12px">
               <option value="">Tüm anahtarlar</option>
             </select>
+            <button id="exportAudit" class="ghost" type="button">JSON</button>
             <button id="refreshAudit" class="ghost" type="button">Yenile</button>
           </div>
         </div>
@@ -392,6 +409,43 @@
       `<div class="budget-top" style="margin-bottom:8px"><strong>${key}</strong><span>${routesCache[key]}</span></div>`
     ).join("") || '<div class="empty">Rota yok.</div>';
     updateRouteHint();
+    const model = byId("model");
+    const current = model.value;
+    const extras = keys.filter(key => ![...model.options].some(option => option.value === key));
+    extras.forEach(key => {
+      const option = document.createElement("option");
+      option.value = key;
+      option.textContent = key;
+      model.appendChild(option);
+    });
+    if ([...model.options].some(option => option.value === current)) model.value = current;
+  }
+
+  async function addRoute() {
+    const alias = byId("routeAlias").value.trim();
+    const target = byId("routeTarget").value;
+    if (!alias) return showMessage("Alias girin.", "error");
+    const response = await fetch("/admin/routes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ alias, target })
+    });
+    if (!response.ok) return showMessage("Rota kaydedilemedi.", "error");
+    byId("routeAlias").value = "";
+    showMessage(`${alias} → ${target} kaydedildi.`, "success");
+    await loadRoutes();
+  }
+
+  function exportAudit() {
+    const filter = byId("auditFilter").value;
+    const rows = filter ? auditRows.filter(row => row.key === filter) : auditRows;
+    const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `promptgateway-audit${filter ? "-" + filter : ""}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    showMessage(`${rows.length} denetim kaydı indirildi.`, "success");
   }
 
   async function copyAnswer() {
@@ -421,7 +475,9 @@
   byId("send").onclick = () => sendPrompt().catch(() => showMessage("Kapıya ulaşılamadı.", "error"));
   byId("copyAnswer").onclick = () => copyAnswer().catch(() => showMessage("Kopyalanamadı.", "error"));
   byId("refreshAudit").onclick = loadAudit;
+  byId("exportAudit").onclick = exportAudit;
   byId("refreshBudget").onclick = loadBudget;
+  byId("addRoute").onclick = () => addRoute().catch(() => showMessage("Rota kaydedilemedi.", "error"));
   byId("clearHistory").onclick = () => {
     historyRows = [];
     localStorage.removeItem(HISTORY_KEY);
