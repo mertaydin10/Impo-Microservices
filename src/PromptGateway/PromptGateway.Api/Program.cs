@@ -109,6 +109,14 @@ app.MapGet("/admin/audit", (AuditLog log) => log.Recent())
 .WithName("GetAudit")
 .WithTags("Admin");
 
+app.MapDelete("/admin/audit", (AuditLog log) =>
+{
+    var cleared = log.Clear();
+    return Results.Ok(new { cleared });
+})
+.WithName("ClearAudit")
+.WithTags("Admin");
+
 app.MapGet("/admin/budget", (BudgetBook book) => book.Snapshot())
 .WithName("GetBudget")
 .WithTags("Admin");

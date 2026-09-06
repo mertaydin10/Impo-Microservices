@@ -180,6 +180,7 @@
               <option value="">Tüm anahtarlar</option>
             </select>
             <button id="exportAudit" class="ghost" type="button">JSON</button>
+            <button id="clearAudit" class="ghost" type="button">Temizle</button>
             <button id="refreshAudit" class="ghost" type="button">Yenile</button>
           </div>
         </div>
@@ -251,12 +252,17 @@
 
   function renderPii() {
     const text = byId("prompt").value;
+    const masked = maskPreview(text);
     const found = detectPii(text);
-    byId("tokenEstimate").textContent = `· ~${estimateTokens(text)} token`;
+    const rawTokens = estimateTokens(text);
+    const maskedTokens = estimateTokens(masked);
+    byId("tokenEstimate").textContent = maskedTokens < rawTokens
+      ? `· ~${rawTokens} → ~${maskedTokens} token (maskeli)`
+      : `· ~${rawTokens} token`;
     byId("piiPills").innerHTML = found.length
       ? found.map(item => `<span class="pill warn">${item} maskelenecek</span>`).join("")
       : '<span class="pill">Hassas veri yok</span>';
-    byId("maskedPreview").textContent = maskPreview(text) || "Prompt yazın.";
+    byId("maskedPreview").textContent = masked || "Prompt yazın.";
   }
 
   function loadHistory() {
@@ -448,6 +454,15 @@
     showMessage(`${rows.length} denetim kaydı indirildi.`, "success");
   }
 
+  async function clearAudit() {
+    if (!confirm("Denetim kaydı temizlensin mi?")) return;
+    const response = await fetch("/admin/audit", { method: "DELETE" });
+    if (!response.ok) return showMessage("Denetim temizlenemedi.", "error");
+    const payload = await response.json();
+    showMessage(`${payload.cleared || 0} kayıt temizlendi.`, "success");
+    await loadAudit();
+  }
+
   async function copyAnswer() {
     const text = byId("answer").textContent.trim();
     if (!text) return;
@@ -476,6 +491,7 @@
   byId("copyAnswer").onclick = () => copyAnswer().catch(() => showMessage("Kopyalanamadı.", "error"));
   byId("refreshAudit").onclick = loadAudit;
   byId("exportAudit").onclick = exportAudit;
+  byId("clearAudit").onclick = () => clearAudit().catch(() => showMessage("Denetim temizlenemedi.", "error"));
   byId("refreshBudget").onclick = loadBudget;
   byId("addRoute").onclick = () => addRoute().catch(() => showMessage("Rota kaydedilemedi.", "error"));
   byId("clearHistory").onclick = () => {

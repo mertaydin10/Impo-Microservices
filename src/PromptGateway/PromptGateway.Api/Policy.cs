@@ -121,6 +121,13 @@ public sealed class AuditLog
     }
 
     public IReadOnlyList<AuditRow> Recent() => _rows.ToArray();
+
+    public int Clear()
+    {
+        var count = _rows.Count;
+        while (_rows.TryDequeue(out _)) { }
+        return count;
+    }
 }
 
 public sealed class ModelRouter
