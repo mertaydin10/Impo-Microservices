@@ -1,6 +1,7 @@
 ﻿@page "/"
 @rendermode InteractiveServer
 @using LocalCrm.Shared
+@using Microsoft.AspNetCore.Components.Forms
 @inject LocalStore Store
 @inject SyncClient Sync
 @inject IJSRuntime Js
@@ -38,10 +39,15 @@
             <option value="favorites">Favoriler üstte</option>
         </select>
         <button type="button" class="ghost @(_favoritesOnly ? "on" : null)" @onclick="ToggleFavoritesOnly">★ Favoriler</button>
+        <button type="button" class="ghost @(_showDeleted ? "on" : null)" @onclick="ToggleShowDeleted">Silinenler</button>
         <button type="button" @onclick="SaveNew">+ Yeni kişi</button>
-        <button type="button" class="ghost" @onclick="DuplicateSelected" disabled="@(_selected is null)">Kopyasını oluştur</button>
+        <button type="button" class="ghost" @onclick="DuplicateSelected" disabled="@(_selected is null || _selected.DeletedAt != default)">Kopyasını oluştur</button>
         <button type="button" class="ghost" @onclick="SyncNow">Bulut ile senkron</button>
         <button type="button" class="ghost" @onclick="ExportCsv">CSV indir</button>
+        <label class="ghost" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin:0">
+            CSV yükle
+            <InputFile OnChange="ImportCsv" accept=".csv,text/csv" style="display:none" />
+        </label>
         <span class="count">@Visible.Count() kişi · N yeni · / ara</span>
     </div>
 
@@ -70,7 +76,7 @@
                 @foreach (var c in Visible)
                 {
                     <button type="button" class="card @(c.Id == _selected?.Id ? "on" : null)" @onclick="() => Select(c)">
-                        <strong>@(_favorites.Contains(c.Id) ? "★ " : "")@(string.IsNullOrWhiteSpace(c.Name.Value) ? "(isimsiz)" : c.Name.Value)</strong>
+                        <strong>@(_favorites.Contains(c.Id) ? "★ " : "")@(string.IsNullOrWhiteSpace(c.Name.Value) ? "(isimsiz)" : c.Name.Value)@(c.DeletedAt != default ? " · silindi" : "")</strong>
                         <span>@(string.IsNullOrWhiteSpace(c.Company.Value) ? "Şirket yok" : c.Company.Value)</span>
                         <span>@(string.IsNullOrWhiteSpace(c.Email.Value) ? c.Phone.Value : c.Email.Value)</span>
                     </button>
@@ -90,7 +96,14 @@
                     <div class="header-actions">
                         <button type="button" class="ghost" @onclick="ToggleFavorite">@(_favorites.Contains(_selected.Id) ? "★ Favoride" : "☆ Favoriye ekle")</button>
                         <button type="button" class="ghost" @onclick="CopyContact">Kopyala</button>
-                        <button type="button" class="danger" @onclick="DeleteSelected">Sil</button>
+                        @if (_selected.DeletedAt != default)
+                        {
+                            <button type="button" class="ghost" @onclick="RestoreSelected">Geri al</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="danger" @onclick="DeleteSelected">Sil</button>
+                        }
                     </div>
                 </header>
                 <label>Ad
@@ -140,9 +153,37 @@
     DateTimeOffset? _lastSyncAt;
     string _name = "", _email = "", _phone = "", _company = "", _notes = "", _status = "", _statusKind = "", _q = "", _sort = "favorites", _companyFilter = "";
     bool _favoritesOnly;
+    bool _showDeleted;
 
     void ClearCompanyFilter() => _companyFilter = "";
     void ToggleFavoritesOnly() => _favoritesOnly = !_favoritesOnly;
+    void ToggleShowDeleted()
+    {
+        _showDeleted = !_showDeleted;
+        ReloadList();
+    }
+
+    void ReloadList()
+    {
+        _list = Store.All(includeDeleted: _showDeleted).ToList();
+        if (_selected is null)
+        {
+            return;
+        }
+
+        var current = _list.FirstOrDefault(c => c.Id == _selected.Id);
+        if (current is not null)
+        {
+            ApplySelection(current);
+            return;
+        }
+
+        _selected = _list.FirstOrDefault();
+        if (_selected is not null)
+        {
+            ApplySelection(_selected);
+        }
+    }
 
     IEnumerable<string> Companies =>
         _list.Select(c => c.Company.Value)
@@ -176,6 +217,10 @@
             {
                 items = items.Where(c => _favorites.Contains(c.Id));
             }
+            if (_showDeleted)
+            {
+                items = items.Where(c => c.DeletedAt != default);
+            }
 
             items = _sort switch
             {
@@ -190,7 +235,7 @@
 
     protected override void OnInitialized()
     {
-        _list = Store.All().ToList();
+        _list = Store.All(includeDeleted: _showDeleted).ToList();
         _favorites = Store.GetFavorites();
         _lastSyncAt = Store.GetLastSyncAt();
         if (_list.Count > 0)
@@ -239,9 +284,9 @@
             Name = FieldMerger.Touch("Yeni kişi", device)
         };
         Store.Save(c);
-        _list = Store.All().ToList();
         _selected = c;
-        _name = c.Name.Value;
+        ReloadList();
+        ApplySelection(c);
         _email = _phone = _company = _notes = "";
         Flash("Yeni kişi yerelde oluşturuldu. Adı düzenleyip kaydedin.", "ok");
     }
@@ -260,7 +305,8 @@
             Notes = FieldMerger.Touch(_notes, device)
         };
         Store.Save(copy);
-        _list = Store.All().ToList();
+        _selected = copy;
+        ReloadList();
         ApplySelection(copy);
         Flash("Kişinin kopyası oluşturuldu. Düzenleyip kaydedin.", "ok");
     }
@@ -302,7 +348,7 @@
         _selected.Company = StampField(_selected.Company, _company);
         _selected.Notes = StampField(_selected.Notes, _notes);
         Store.Save(_selected);
-        _list = Store.All().ToList();
+        ReloadList();
         var duplicateEmail = !string.IsNullOrWhiteSpace(_email) &&
             _list.Any(c => c.Id != _selected.Id && c.Email.Value.Equals(_email, StringComparison.OrdinalIgnoreCase));
         var duplicatePhone = !string.IsNullOrWhiteSpace(_phone) &&
@@ -314,6 +360,15 @@
             duplicateEmail || duplicatePhone ? "error" : "ok");
     }
 
+    async Task RestoreSelected()
+    {
+        if (_selected is null || _selected.DeletedAt == default) return;
+        _selected.DeletedAt = default;
+        Store.Save(_selected);
+        ReloadList();
+        Flash("Kişi geri yüklendi.", "ok");
+    }
+
     async Task ExportCsv()
     {
         var header = "Ad,Eposta,Telefon,Sirket,Not";
@@ -321,6 +376,79 @@
             Csv(c.Name.Value), Csv(c.Email.Value), Csv(c.Phone.Value), Csv(c.Company.Value), Csv(c.Notes.Value)));
         await Js.InvokeVoidAsync("impoDownload", "kisiler.csv", header + "\n" + string.Join("\n", lines));
         Flash($"{Visible.Count()} kişi CSV olarak indirildi.", "ok");
+    }
+
+    async Task ImportCsv(InputFileChangeEventArgs args)
+    {
+        await using var stream = args.File.OpenReadStream(maxAllowedSize: 2_000_000);
+        using var reader = new StreamReader(stream);
+        var text = await reader.ReadToEndAsync();
+        var rows = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        if (rows.Length <= 1)
+        {
+            Flash("CSV boş veya sadece başlık satırı var.", "error");
+            return;
+        }
+
+        var device = Store.DeviceId;
+        var imported = 0;
+        foreach (var row in rows.Skip(1))
+        {
+            var cols = ParseCsvLine(row);
+            if (cols.Count == 0 || cols.All(string.IsNullOrWhiteSpace)) continue;
+            var name = cols.ElementAtOrDefault(0)?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            if (name.Equals("Ad", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("name", StringComparison.OrdinalIgnoreCase)) continue;
+            var contact = new ContactRecord
+            {
+                Id = Guid.NewGuid(),
+                Name = FieldMerger.Touch(name, device),
+                Email = FieldMerger.Touch(cols.ElementAtOrDefault(1)?.Trim() ?? "", device),
+                Phone = FieldMerger.Touch(cols.ElementAtOrDefault(2)?.Trim() ?? "", device),
+                Company = FieldMerger.Touch(cols.ElementAtOrDefault(3)?.Trim() ?? "", device),
+                Notes = FieldMerger.Touch(cols.ElementAtOrDefault(4)?.Trim() ?? "", device)
+            };
+            Store.Save(contact);
+            imported++;
+        }
+
+        ReloadList();
+        Flash(imported == 0 ? "İçe aktarılacak satır bulunamadı." : $"{imported} kişi CSV’den eklendi.", imported == 0 ? "error" : "ok");
+    }
+
+    static List<string> ParseCsvLine(string line)
+    {
+        var result = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var inQuotes = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (ch == '"')
+            {
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    current.Append('"');
+                    i++;
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
+            }
+            else if (ch == ',' && !inQuotes)
+            {
+                result.Add(current.ToString());
+                current.Clear();
+            }
+            else
+            {
+                current.Append(ch);
+            }
+        }
+        result.Add(current.ToString());
+        return result;
     }
 
     static string Csv(string value)
@@ -341,16 +469,7 @@
             Store.SetFavorite(_selected.Id, false);
             _favorites = Store.GetFavorites();
         }
-        _list = Store.All().ToList();
-        _selected = _list.FirstOrDefault();
-        if (_selected is not null)
-        {
-            _name = _selected.Name.Value;
-            _email = _selected.Email.Value;
-            _phone = _selected.Phone.Value;
-            _company = _selected.Company.Value;
-            _notes = _selected.Notes.Value;
-        }
+        ReloadList();
         Flash("Kişi bu cihazdan kaldırıldı.", "ok");
     }
 
@@ -361,19 +480,7 @@
             Flash(await Sync.SyncAsync(), "ok");
             Store.SetLastSyncAt(DateTimeOffset.UtcNow);
             _lastSyncAt = Store.GetLastSyncAt();
-            _list = Store.All().ToList();
-            if (_selected is not null)
-            {
-                _selected = _list.FirstOrDefault(x => x.Id == _selected.Id);
-                if (_selected is not null)
-                {
-                    _name = _selected.Name.Value;
-                    _email = _selected.Email.Value;
-                    _phone = _selected.Phone.Value;
-                    _company = _selected.Company.Value;
-                    _notes = _selected.Notes.Value;
-                }
-            }
+            ReloadList();
         }
         catch (Exception ex)
         {
